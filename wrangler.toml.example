@@ -1,0 +1,10 @@
+# Ejemplo orientativo para desarrollo local. No es necesario si configuras
+# el binding D1 directamente desde Cloudflare Pages > Settings > Functions.
+name = "papermaker-biblioteca-digital"
+compatibility_date = "2026-10-21"
+pages_build_output_dir = "./public"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "papermaker-biblioteca-db"
+database_id = "REEMPLAZA_CON_EL_ID_DE_TU_NUEVA_BASE_D1"

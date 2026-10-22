@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#171923">
+  <meta name="description" content="PaperMaker Biblioteca Digital: clásicos, cultura y lectura para todos.">
+  <title>PaperMaker Biblioteca Digital</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="PaperMaker Biblioteca Digital, inicio"><span class="brand-mark">P<span>♥</span>M</span><span>PaperMaker <small>Biblioteca Digital</small></span></a>
+    <nav class="nav"><a href="#catalogo">Biblioteca</a><a href="#acerca">Acerca de</a><button id="accountButton" class="button button-outline">Iniciar sesión</button></nav>
+  </header>
+  <main>
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">LEER · ESCUCHAR · DESCUBRIR</p>
+        <h1>Un mundo de historias,<br><em>a tu alcance.</em></h1>
+        <p class="hero-lead">Explora lecturas, descubre nuevas ideas y continúa donde te quedaste, desde tus dispositivos.</p>
+        <div class="hero-actions"><a class="button" href="#catalogo">Explorar biblioteca <span aria-hidden="true">→</span></a><button id="heroAccount" class="button button-light">Crear cuenta gratis</button></div>
+        <p class="small muted">Tu biblioteca personal, estés donde estés.</p>
+      </div>
+      <div class="hero-art" aria-hidden="true"><div class="sun"></div><div class="book book-back"></div><div class="book book-mid"></div><div class="book book-front"><span>PM</span><b>Historias<br>por descubrir</b><small>BIBLIOTECA DIGITAL</small></div><div class="spark spark-one">✳</div><div class="spark spark-two">✦</div></div>
+    </section>
+
+    <section class="features" aria-label="Funciones">
+      <article><span class="feature-icon">▤</span><div><h3>Lee a tu ritmo</h3><p>Texto cómodo, capítulos y ajustes de lectura.</p></div></article>
+      <article><span class="feature-icon">♫</span><div><h3>Escucha en voz alta</h3><p>Prueba la narración disponible en tu dispositivo.</p></div></article>
+      <article><span class="feature-icon">↗</span><div><h3>Continúa en otro dispositivo</h3><p>Inicia sesión para sincronizar tu progreso.</p></div></article>
+    </section>
+
+    <section id="catalogo" class="catalog-section">
+      <div class="section-heading"><div><p class="eyebrow">ENCUENTRA TU PRÓXIMA LECTURA</p><h2>La biblioteca</h2></div><p class="muted" id="catalogCount">Cargando libros…</p></div>
+      <div class="catalog-controls"><label class="search-box"><span>⌕</span><input id="searchInput" type="search" placeholder="Buscar por título, autor o tema…" aria-label="Buscar libros"></label><select id="categorySelect" aria-label="Filtrar por categoría"><option>Todas</option></select></div>
+      <div id="bookGrid" class="book-grid"><div class="loading">Preparando la biblioteca…</div></div>
+      <p class="notice">Los títulos iniciales son lecturas de muestra. Antes de publicar obras de terceros, verifica sus derechos y las condiciones de distribución aplicables en México.</p>
+    </section>
+
+    <section id="acerca" class="about">
+      <div><p class="eyebrow">UNA INICIATIVA PAPERMAKER</p><h2>La lectura nos conecta.</h2></div>
+      <div><p>PaperMaker Biblioteca Digital nace para acercar la lectura y la cultura a más personas. Más adelante podrás encontrar recomendaciones, materiales educativos y enlaces a los servicios de PaperMaker.</p><a class="text-link" href="https://papermaker.66ghz.com" target="_blank" rel="noopener noreferrer">Conoce PaperMaker <span>↗</span></a></div>
+    </section>
+  </main>
+  <footer><a class="brand footer-brand" href="/"><span class="brand-mark">P<span>♥</span>M</span><span>PaperMaker <small>Biblioteca Digital</small></span></a><span>Leer · Escuchar · Aprender</span><span>© <span id="year"></span> PaperMaker</span></footer>
+
+  <dialog id="authDialog" class="dialog">
+    <form method="dialog" class="dialog-close"><button aria-label="Cerrar">×</button></form>
+    <p class="eyebrow">TU ESPACIO DE LECTURA</p><h2 id="authTitle">Inicia sesión</h2><p id="authIntro" class="muted">Continúa donde te quedaste.</p>
+    <form id="authForm" class="auth-form">
+      <label id="nameField" class="field hidden">Nombre<input name="name" autocomplete="name" minlength="2" maxlength="80"></label>
+      <label class="field">Correo electrónico<input name="email" type="email" autocomplete="email" required maxlength="190"></label>
+      <label class="field">Contraseña<input name="password" type="password" autocomplete="current-password" minlength="10" maxlength="200" required></label>
+      <p class="form-help">Usa una contraseña de al menos 10 caracteres.</p>
+      <p id="authError" class="error" role="alert"></p>
+      <button id="authSubmit" class="button button-full" type="submit">Iniciar sesión</button>
+    </form>
+    <p class="switch-auth"><span id="switchLabel">¿Aún no tienes cuenta?</span> <button id="switchAuth" class="inline-button">Crear cuenta</button></p>
+  </dialog>
+
+  <dialog id="readerDialog" class="reader-dialog">
+    <div class="reader-toolbar"><button id="closeReader" class="icon-button" aria-label="Cerrar libro">← <span>Biblioteca</span></button><div class="reader-actions"><button id="fontDown" class="icon-button" aria-label="Reducir tamaño de letra">A−</button><button id="fontUp" class="icon-button" aria-label="Aumentar tamaño de letra">A+</button><button id="themeToggle" class="icon-button" aria-label="Cambiar tema">◐</button></div></div>
+    <div class="reader-layout"><aside class="reader-side"><p class="eyebrow">LEYENDO</p><h3 id="readerBookTitle"></h3><p id="readerAuthor" class="muted"></p><hr><p class="eyebrow">CAPÍTULOS</p><div id="chapterList" class="chapter-list"></div><div class="reader-sync" id="syncStatus">Inicia sesión para sincronizar tu progreso.</div></aside><article class="reader-content"><p class="eyebrow" id="readerCategory"></p><h1 id="chapterTitle"></h1><div id="readerText" class="reader-text"></div><div class="reader-bottom"><button id="listenButton" class="button button-light">▶ Escuchar capítulo</button><div class="chapter-nav"><button id="prevChapter" class="button button-outline">Anterior</button><button id="nextChapter" class="button">Siguiente capítulo →</button></div></div><p class="muted small" id="readerRights"></p></article></div>
+  </dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="/app.js" defer></script>
+</body>
+</html>
