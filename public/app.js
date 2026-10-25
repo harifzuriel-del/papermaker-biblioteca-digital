@@ -194,7 +194,8 @@ async function submitAuth(event) {
   const form = new FormData($("#authForm"));
   const body = Object.fromEntries(form.entries());
 
-  const path = state.authMode === "register"
+  const mode = state.authMode;
+  const path = mode === "register"
     ? "/api/auth/register"
     : "/api/auth/login";
 
@@ -202,41 +203,64 @@ async function submitAuth(event) {
   $("#authSubmit").textContent = "Un momento…";
 
   try {
-    const data = await api(path, {
-      method: "POST",
-      body: JSON.stringify(body)
-    });
+    // Paso 1: iniciar sesión o registrar la cuenta.
+    let data;
+
+    try {
+      data = await api(path, {
+        method: "POST",
+        body: JSON.stringify(body)
+      });
+    } catch (e) {
+      throw new Error("Error en autenticación: " + e.message);
+    }
 
     state.user = data.user;
 
-    const p = await api("/api/progress");
-    state.progress = Object.fromEntries(
-      (p.progress || []).map(x => [x.bookId, x])
-    );
+    // La autenticación ya funcionó. Si falla el progreso,
+    // no debemos tratarlo como un fallo de inicio de sesión.
+    try {
+      const p = await api("/api/progress");
+
+      state.progress = Object.fromEntries(
+        (p.progress || []).map(x => [x.bookId, x])
+      );
+    } catch (e) {
+      console.error("Error al cargar el progreso:", e);
+      state.progress = state.progress || {};
+
+      toast("Sesión iniciada, pero no se pudo cargar el progreso.");
+    }
 
     $("#authDialog").close();
     $("#authForm").reset();
     renderAccount();
 
-    toast(
-      state.authMode === "register"
-        ? "¡Cuenta creada! Ya puedes leer."
-        : "Sesión iniciada."
-    );
+    if (mode === "register") {
+      toast("¡Cuenta creada! Ya puedes leer.");
+    } else {
+      toast("Sesión iniciada.");
+    }
 
     if (state.currentBook) {
-      await syncProgressFromServer(state.currentBook.id);
+      try {
+        await syncProgressFromServer(state.currentBook.id);
+      } catch (e) {
+        console.error("Error al sincronizar la lectura:", e);
+      }
     }
   } catch (e) {
+    console.error("Error de autenticación:", e);
     $("#authError").textContent = e.message;
   } finally {
     $("#authSubmit").disabled = false;
     $("#authSubmit").textContent =
-      state.authMode === "register"
+      mode === "register"
         ? "Crear cuenta gratis"
         : "Iniciar sesión";
   }
 }
+
 
 async function logout() {
   try {
