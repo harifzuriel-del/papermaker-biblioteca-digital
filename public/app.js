@@ -90,19 +90,24 @@ async function logout() {
   try { await api("/api/auth/logout", { method: "POST" }); } catch {}
   state.user = null; state.progress = {}; renderAccount(); toast("Has cerrado sesión.");
 }
-async function syncProgressFromServer(bookId) {
-  if (!state.user) return;
-  try {
-    const p = await api("/api/progress");
-    state.progress = Object.fromEntries((p.progress || []).map(x => [x.bookId, x]));
-    const saved = state.progress[bookId];
-    if (saved && state.content?.chapters?.length) {
-      state.chapter = Math.max(0, Math.min(Number(saved.chapter) || 0, state.content.chapters.length - 1));
-      renderChapter();
-    }
-    $("#syncStatus").textContent = "Progreso sincronizado con tu cuenta.";
-  } catch (e) { $("#syncStatus").textContent = e.message; }
+
+if (saved && state.content?.chapters?.length) {
+  state.chapter = Math.max(
+    0,
+    Math.min(
+      Number(saved.chapter) || 0,
+      state.content.chapters.length - 1
+    )
+  );
+
+  renderChapter();
+
+  const readerText = $("#readerText");
+  if (readerText) {
+    readerText.scrollTop = Math.max(0, Number(saved.position) || 0);
+  }
 }
+
 function queueProgressSave() {
   if (!state.user || !state.currentBook) return;
   clearTimeout(state.saveTimer);
