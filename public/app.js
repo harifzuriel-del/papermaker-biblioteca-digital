@@ -35,6 +35,7 @@ async function api(path, options = {}) {
   });
 
   let data = {};
+
   try {
     data = await response.json();
   } catch {}
@@ -48,11 +49,16 @@ async function api(path, options = {}) {
 
 function toast(message) {
   const el = $("#toast");
+  if (!el) return;
+
   el.textContent = message;
   el.classList.add("show");
 
   clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => el.classList.remove("show"), 3000);
+
+  toast.timer = setTimeout(() => {
+    el.classList.remove("show");
+  }, 3000);
 }
 
 function cover(book) {
@@ -66,12 +72,17 @@ function cover(book) {
 }
 
 function renderBooks() {
-  const query = $("#searchInput").value.trim().toLocaleLowerCase("es-MX");
+  const query = $("#searchInput").value
+    .trim()
+    .toLocaleLowerCase("es-MX");
+
   const category = $("#categorySelect").value;
 
   const books = state.books.filter(b =>
-    (!query || `${b.title} ${b.author} ${b.description} ${b.category}`
-      .toLocaleLowerCase("es-MX").includes(query)) &&
+    (!query ||
+      `${b.title} ${b.author} ${b.description} ${b.category}`
+        .toLocaleLowerCase("es-MX")
+        .includes(query)) &&
     (category === "Todas" || b.category === category)
   );
 
@@ -102,6 +113,7 @@ function renderBooks() {
 async function loadBooks() {
   try {
     const data = await api("/api/books");
+
     state.books = data.books || [];
 
     const cats = [...new Set(state.books.map(b => b.category))]
@@ -114,6 +126,7 @@ async function loadBooks() {
     renderBooks();
   } catch (e) {
     $("#catalogCount").textContent = "No se pudo cargar";
+
     $("#bookGrid").innerHTML = `
       <div class="empty-state">
         No pudimos conectar con la biblioteca. Comprueba que la API y la base D1 estén configuradas.
@@ -124,15 +137,19 @@ async function loadBooks() {
 
 function setAuthMode(mode) {
   state.authMode = mode;
+
   const register = mode === "register";
 
-  $("#authTitle").textContent = register ? "Crea tu cuenta" : "Inicia sesión";
+  $("#authTitle").textContent =
+    register ? "Crea tu cuenta" : "Inicia sesión";
+
   $("#authIntro").textContent = register
     ? "Guarda tu progreso y continúa leyendo en otros dispositivos."
     : "Continúa donde te quedaste.";
 
   $("#nameField").classList.toggle("hidden", !register);
   $("#nameField input").required = register;
+
   $("#authForm [name=password]").autocomplete =
     register ? "new-password" : "current-password";
 
@@ -150,6 +167,7 @@ function setAuthMode(mode) {
 
 function openAuth(mode = "login") {
   setAuthMode(mode);
+
   if (!$("#authDialog").open) {
     $("#authDialog").showModal();
   }
@@ -172,10 +190,12 @@ function renderAccount() {
 async function refreshUser() {
   try {
     const data = await api("/api/auth/me");
+
     state.user = data.user;
 
     if (state.user) {
       const p = await api("/api/progress");
+
       state.progress = Object.fromEntries(
         (p.progress || []).map(x => [x.bookId, x])
       );
@@ -189,12 +209,14 @@ async function refreshUser() {
 
 async function submitAuth(event) {
   event.preventDefault();
+
   $("#authError").textContent = "";
 
   const form = new FormData($("#authForm"));
   const body = Object.fromEntries(form.entries());
 
   const mode = state.authMode;
+
   const path = mode === "register"
     ? "/api/auth/register"
     : "/api/auth/login";
@@ -203,7 +225,6 @@ async function submitAuth(event) {
   $("#authSubmit").textContent = "Un momento…";
 
   try {
-    // Paso 1: iniciar sesión o registrar la cuenta.
     let data;
 
     try {
@@ -217,8 +238,6 @@ async function submitAuth(event) {
 
     state.user = data.user;
 
-    // La autenticación ya funcionó. Si falla el progreso,
-    // no debemos tratarlo como un fallo de inicio de sesión.
     try {
       const p = await api("/api/progress");
 
@@ -227,6 +246,7 @@ async function submitAuth(event) {
       );
     } catch (e) {
       console.error("Error al cargar el progreso:", e);
+
       state.progress = state.progress || {};
 
       toast("Sesión iniciada, pero no se pudo cargar el progreso.");
@@ -234,13 +254,14 @@ async function submitAuth(event) {
 
     $("#authDialog").close();
     $("#authForm").reset();
+
     renderAccount();
 
-    if (mode === "register") {
-      toast("¡Cuenta creada! Ya puedes leer.");
-    } else {
-      toast("Sesión iniciada.");
-    }
+    toast(
+      mode === "register"
+        ? "¡Cuenta creada! Ya puedes leer."
+        : "Sesión iniciada."
+    );
 
     if (state.currentBook) {
       try {
@@ -251,9 +272,11 @@ async function submitAuth(event) {
     }
   } catch (e) {
     console.error("Error de autenticación:", e);
+
     $("#authError").textContent = e.message;
   } finally {
     $("#authSubmit").disabled = false;
+
     $("#authSubmit").textContent =
       mode === "register"
         ? "Crear cuenta gratis"
@@ -261,100 +284,49 @@ async function submitAuth(event) {
   }
 }
 
-
 async function logout() {
   try {
-    await api("/api/auth/logout", { method: "POST" });
+    await api("/api/auth/logout", {
+      method: "POST"
+    });
   } catch {}
 
   clearTimeout(state.saveTimer);
+
   state.user = null;
   state.progress = {};
+
   renderAccount();
+
   toast("Has cerrado sesión.");
 }
 
-/*
- * Encuentra el elemento que realmente se desplaza al leer.
- * Puede ser el texto o alguno de sus contenedores.
- */
+/* =========================================
+   GUARDADO Y RESTAURACIÓN DE LA LECTURA
+   El contenedor desplazable es readerDialog.
+========================================= */
+
 function getReaderScrollContainer() {
-  const readerText = $("#readerText");
-  if (!readerText) return null;
-
-  let el = readerText;
-
-  while (el && el !== $("#readerDialog")) {
-    const style = window.getComputedStyle(el);
-    const overflow = style.overflowY;
-
-    if (
-      el.scrollHeight > el.clientHeight + 1 &&
-      (overflow === "auto" ||
-        overflow === "scroll" ||
-        el === readerText)
-    ) {
-      return el;
-    }
-
-    el = el.parentElement;
-  }
-
-  return readerText;
+  return $("#readerDialog");
 }
 
 function getReadingPosition() {
   const container = getReaderScrollContainer();
-  return container ? Math.max(0, Math.round(container.scrollTop)) : 0;
+
+  return container
+    ? Math.max(0, Math.round(container.scrollTop))
+    : 0;
 }
 
 function restoreReadingPosition(position) {
   const container = getReaderScrollContainer();
 
-  if (container) {
-    container.scrollTop = Math.max(0, Number(position) || 0);
-  }
-}
+  if (!container) return;
 
-async function syncProgressFromServer(bookId) {
-  if (!state.user) return;
-
-  state.isRestoringProgress = true;
-  clearTimeout(state.saveTimer);
-
-  try {
-    const p = await api("/api/progress");
-
-    state.progress = Object.fromEntries(
-      (p.progress || []).map(x => [x.bookId, x])
-    );
-
-    const saved = state.progress[bookId];
-
-    if (saved && state.content?.chapters?.length) {
-      state.chapter = Math.max(
-        0,
-        Math.min(
-          Number(saved.chapter) || 0,
-          state.content.chapters.length - 1
-        )
-      );
-
-      renderChapter();
-      restoreReadingPosition(saved.position);
-    }
-
-    $("#syncStatus").textContent = "Progreso sincronizado con tu cuenta.";
-  } catch (e) {
-    $("#syncStatus").textContent = e.message;
-  } finally {
-    state.isRestoringProgress = false;
-
-    // Guarda el estado restaurado si hay un libro abierto.
-    if (state.currentBook?.id === bookId && state.user) {
-      queueProgressSave();
-    }
-  }
+  container.scrollTop = Math.max(
+    0,
+    Number(position) || 0
+  );
 }
 
 function queueProgressSave() {
@@ -371,16 +343,21 @@ function queueProgressSave() {
   state.saveTimer = setTimeout(async () => {
     const book = state.currentBook;
 
+    if (!book || !state.user) return;
+
     const payload = {
       chapter: state.chapter,
       position: getReadingPosition()
     };
 
     try {
-      await api(`/api/progress/${encodeURIComponent(book.id)}`, {
-        method: "PUT",
-        body: JSON.stringify(payload)
-      });
+      await api(
+        `/api/progress/${encodeURIComponent(book.id)}`,
+        {
+          method: "PUT",
+          body: JSON.stringify(payload)
+        }
+      );
 
       state.progress[book.id] = {
         bookId: book.id,
@@ -388,17 +365,84 @@ function queueProgressSave() {
         updatedAt: new Date().toISOString()
       };
 
-      $("#syncStatus").textContent = "Progreso guardado en tu cuenta.";
-    } catch {
+      $("#syncStatus").textContent =
+        "Progreso guardado en tu cuenta.";
+    } catch (e) {
+      console.error("Error al guardar el progreso:", e);
+
       $("#syncStatus").textContent =
         "No se pudo sincronizar. Comprueba tu conexión.";
     }
   }, 700);
 }
 
+async function syncProgressFromServer(bookId) {
+  if (!state.user) return;
+
+  state.isRestoringProgress = true;
+
+  clearTimeout(state.saveTimer);
+
+  try {
+    const data = await api("/api/progress");
+
+    state.progress = Object.fromEntries(
+      (data.progress || []).map(x => [x.bookId, x])
+    );
+
+    const saved = state.progress[bookId];
+
+    if (
+      saved &&
+      state.currentBook?.id === bookId &&
+      state.content?.chapters?.length
+    ) {
+      const savedChapter = Number(saved.chapter) || 0;
+
+      state.chapter = Math.max(
+        0,
+        Math.min(
+          savedChapter,
+          state.content.chapters.length - 1
+        )
+      );
+
+      // Primero renderiza el capítulo guardado.
+      renderChapter();
+
+      // Después restaura el desplazamiento de toda la ventana.
+      restoreReadingPosition(saved.position);
+    }
+
+    $("#syncStatus").textContent =
+      "Progreso sincronizado con tu cuenta.";
+  } catch (e) {
+    console.error("Error al sincronizar el progreso:", e);
+
+    $("#syncStatus").textContent =
+      "No se pudo sincronizar tu progreso.";
+  } finally {
+    state.isRestoringProgress = false;
+
+    // Guarda el estado restaurado, no el estado temporal anterior.
+    if (
+      state.currentBook?.id === bookId &&
+      state.user
+    ) {
+      queueProgressSave();
+    }
+  }
+}
+
+/* =========================================
+   APERTURA DEL LIBRO Y CAPÍTULOS
+========================================= */
+
 async function openBook(id) {
   try {
-    const data = await api(`/api/books/${encodeURIComponent(id)}`);
+    const data = await api(
+      `/api/books/${encodeURIComponent(id)}`
+    );
 
     clearTimeout(state.saveTimer);
 
@@ -412,6 +456,7 @@ async function openBook(id) {
     $("#readerRights").textContent = data.book.rights_note;
 
     $("#readerDialog").showModal();
+
     document.body.classList.add("reader-open");
 
     renderChapter();
@@ -423,6 +468,8 @@ async function openBook(id) {
         "Inicia sesión para sincronizar tu progreso entre dispositivos.";
     }
   } catch (e) {
+    console.error("Error al abrir el libro:", e);
+
     toast(e.message);
   }
 }
@@ -448,7 +495,8 @@ function renderChapter() {
   $("#readerText").style.fontSize = `${state.fontSize}px`;
 
   $("#chapterList").innerHTML = chapters.map((c, i) => `
-    <button class="chapter-item ${i === state.chapter ? "active" : ""}"
+    <button
+      class="chapter-item ${i === state.chapter ? "active" : ""}"
       data-chapter="${i}">
       ${i + 1}. ${esc(c.title)}
     </button>
@@ -464,13 +512,20 @@ function renderChapter() {
       ? "Fin del libro"
       : "Siguiente capítulo →";
 
-  // Cada capítulo empieza arriba. La sincronización puede
-  // restaurar después la posición guardada en el servidor.
+  // Al cambiar de capítulo, empieza desde arriba.
+  // La sincronización puede restaurar después la posición guardada.
   const container = getReaderScrollContainer();
-  if (container) container.scrollTop = 0;
+
+  if (container) {
+    container.scrollTop = 0;
+  }
 
   queueProgressSave();
 }
+
+/* =========================================
+   NARRACIÓN DE TEXTO
+========================================= */
 
 function stopSpeech() {
   if ("speechSynthesis" in window) {
@@ -478,6 +533,7 @@ function stopSpeech() {
   }
 
   state.utterance = null;
+
   $("#listenButton").textContent = "▶ Escuchar capítulo";
 }
 
@@ -493,6 +549,7 @@ function toggleSpeech() {
   }
 
   const chapter = state.content?.chapters?.[state.chapter];
+
   if (!chapter) return;
 
   const utterance = new SpeechSynthesisUtterance(
@@ -504,33 +561,46 @@ function toggleSpeech() {
 
   utterance.onend = () => {
     state.utterance = null;
+
     $("#listenButton").textContent = "▶ Escuchar capítulo";
   };
 
   utterance.onerror = () => {
     state.utterance = null;
+
     $("#listenButton").textContent = "▶ Escuchar capítulo";
+
     toast("No se pudo reproducir la voz en este dispositivo.");
   };
 
   state.utterance = utterance;
+
   window.speechSynthesis.speak(utterance);
 
   $("#listenButton").textContent = "Ⅱ Detener narración";
 }
 
-// Catálogo y cuenta
+/* =========================================
+   EVENTOS DEL CATÁLOGO Y DE LA CUENTA
+========================================= */
+
 $("#searchInput").addEventListener("input", renderBooks);
+
 $("#categorySelect").addEventListener("change", renderBooks);
 
 $("#bookGrid").addEventListener("click", e => {
   const btn = e.target.closest("[data-read]");
-  if (btn) openBook(btn.dataset.read);
+
+  if (btn) {
+    openBook(btn.dataset.read);
+  }
 });
 
 $("#accountButton").addEventListener("click", () => {
   if (state.user) {
-    if (confirm("¿Quieres cerrar tu sesión?")) logout();
+    if (confirm("¿Quieres cerrar tu sesión?")) {
+      logout();
+    }
   } else {
     openAuth("login");
   }
@@ -545,35 +615,49 @@ $("#heroAccount").addEventListener("click", () => {
 });
 
 $("#switchAuth").addEventListener("click", () => {
-  setAuthMode(state.authMode === "login" ? "register" : "login");
+  setAuthMode(
+    state.authMode === "login" ? "register" : "login"
+  );
 });
 
 $("#authForm").addEventListener("submit", submitAuth);
 
-// Lector
+/* =========================================
+   EVENTOS DEL LECTOR
+========================================= */
+
 $("#closeReader").addEventListener("click", () => {
   stopSpeech();
+
   $("#readerDialog").close();
+
   document.body.classList.remove("reader-open");
 });
 
 $("#readerDialog").addEventListener("close", () => {
   stopSpeech();
+
   document.body.classList.remove("reader-open");
 });
 
-// Captura el desplazamiento aunque el scroll ocurra en un
-// contenedor interno del lector y no directamente en el texto.
-$("#readerDialog").addEventListener("scroll", () => {
-  queueProgressSave();
-}, true);
+// Un solo evento para guardar el desplazamiento del lector.
+// La posición se obtiene siempre de #readerDialog.
+$("#readerDialog").addEventListener(
+  "scroll",
+  () => {
+    queueProgressSave();
+  },
+  { passive: true }
+);
 
 $("#chapterList").addEventListener("click", e => {
   const btn = e.target.closest("[data-chapter]");
 
   if (btn) {
     stopSpeech();
+
     state.chapter = Number(btn.dataset.chapter);
+
     renderChapter();
   }
 });
@@ -581,26 +665,35 @@ $("#chapterList").addEventListener("click", e => {
 $("#prevChapter").addEventListener("click", () => {
   if (state.chapter > 0) {
     stopSpeech();
+
     state.chapter--;
+
     renderChapter();
   }
 });
 
 $("#nextChapter").addEventListener("click", () => {
-  if (state.chapter < state.content.chapters.length - 1) {
+  if (
+    state.content &&
+    state.chapter < state.content.chapters.length - 1
+  ) {
     stopSpeech();
+
     state.chapter++;
+
     renderChapter();
   }
 });
 
 $("#fontDown").addEventListener("click", () => {
   state.fontSize = Math.max(15, state.fontSize - 1);
+
   $("#readerText").style.fontSize = `${state.fontSize}px`;
 });
 
 $("#fontUp").addEventListener("click", () => {
   state.fontSize = Math.min(28, state.fontSize + 1);
+
   $("#readerText").style.fontSize = `${state.fontSize}px`;
 });
 
@@ -610,8 +703,15 @@ $("#themeToggle").addEventListener("click", () => {
 
 $("#listenButton").addEventListener("click", toggleSpeech);
 
+/* =========================================
+   INICIALIZACIÓN
+========================================= */
+
 $("#year").textContent = new Date().getFullYear();
 
 (async function init() {
-  await Promise.all([loadBooks(), refreshUser()]);
+  await Promise.all([
+    loadBooks(),
+    refreshUser()
+  ]);
 })();
