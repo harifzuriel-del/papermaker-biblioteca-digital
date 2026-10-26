@@ -8,7 +8,11 @@ import {
 } from "../_lib.js";
 
 function validateBook(body) {
-  if (!body || typeof body !== "object") {
+  if (
+  !body ||
+  typeof body !== "object" ||
+  Array.isArray(body)
+) {
     return "Los datos del libro no son válidos.";
   }
 
