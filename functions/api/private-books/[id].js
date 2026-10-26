@@ -2,7 +2,7 @@
 import {
   json,
   currentUser,
-  bodyJson,
+  bodyJsonLimited,
   sameOrigin
 } from "../_lib.js";
 
@@ -88,11 +88,17 @@ export async function onRequestPut({ request, env, params }) {
     return json({ error: "Inicia sesión para editar tus libros privados." }, 401);
   }
 
-  const body = await bodyJson(request);
+  const parsed = await bodyJsonLimited(request);
 
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return json({ error: "La solicitud no contiene JSON válido." }, 400);
-  }
+if (!parsed.ok) {
+  return json({ error: parsed.error }, parsed.status);
+}
+
+const body = parsed.data;
+
+if (!body || typeof body !== "object" || Array.isArray(body)) {
+  return json({ error: "La solicitud no contiene JSON válido." }, 400);
+}
 
   const title =
     typeof body.title === "string" ? body.title.trim() : "";
