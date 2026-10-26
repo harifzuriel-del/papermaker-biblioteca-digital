@@ -2,7 +2,7 @@
 import {
   json,
   currentUser,
-  bodyJson,
+  bodyJsonLimited,
   sameOrigin,
   randomId
 } from "../_lib.js";
@@ -102,12 +102,14 @@ export async function onRequestPost({ request, env }) {
   if (!user) {
     return json({ error: "Inicia sesión para guardar libros privados." }, 401);
   }
+  
+const parsed = await bodyJsonLimited(request);
 
-  const body = await bodyJson(request);
+if (!parsed.ok) {
+  return json({ error: parsed.error }, parsed.status);
+}
 
-  if (!body) {
-    return json({ error: "La solicitud no contiene JSON válido." }, 400);
-  }
+const body = parsed.data;
 
   const validationError = validateBook(body);
 
