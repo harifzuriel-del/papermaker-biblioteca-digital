@@ -67,3 +67,62 @@ export function sameOrigin(request) {
     return new URL(origin).host === new URL(request.url).host;
   } catch { return false; }
 }
+
+export async function bodyJsonLimited(request, maxBytes = 2_000_000) {
+  const contentType = request.headers.get("Content-Type") || "";
+
+  if (!contentType.toLowerCase().includes("application/json")) {
+    return {
+      ok: false,
+      status: 415,
+      error: "La solicitud debe enviarse como JSON."
+    };
+  }
+
+  const contentLength = request.headers.get("Content-Length");
+
+  if (contentLength !== null) {
+    const length = Number(contentLength);
+
+    if (!Number.isFinite(length) || length < 0) {
+      return {
+        ok: false,
+        status: 400,
+        error: "El tamaño de la solicitud no es válido."
+      };
+    }
+
+    if (length > maxBytes) {
+      return {
+        ok: false,
+        status: 413,
+        error: "El contenido supera el tamaño permitido."
+      };
+    }
+  }
+
+  try {
+    const text = await request.text();
+    const actualBytes = new TextEncoder().encode(text).length;
+
+    if (actualBytes > maxBytes) {
+      return {
+        ok: false,
+        status: 413,
+        error: "El contenido supera el tamaño permitido."
+      };
+    }
+
+    return {
+      ok: true,
+      data: JSON.parse(text)
+    };
+  } catch {
+    return {
+      ok: false,
+      status: 400,
+      error: "La solicitud no contiene JSON válido."
+    };
+  }
+}
+
