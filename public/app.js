@@ -680,12 +680,22 @@ if (importBookForm) {
   importBookForm.addEventListener("submit", importPrivateBook);
 }
 
-$("#privateBookGrid").addEventListener("click", e => {
-  const readButton = e.target.closest("[data-private-read]");
-  const deleteButton = e.target.closest("[data-private-delete]");
-  if (readButton) openPrivateBook(readButton.dataset.privateRead);
-  if (deleteButton) deletePrivateBook(deleteButton.dataset.privateDelete);
-});
+const privateBookGrid = $("#privateBookGrid");
+
+if (privateBookGrid) {
+  privateBookGrid.addEventListener("click", e => {
+    const readButton = e.target.closest("[data-private-read]");
+    const deleteButton = e.target.closest("[data-private-delete]");
+
+    if (readButton) {
+      openPrivateBook(readButton.dataset.privateRead);
+    }
+
+    if (deleteButton) {
+      deletePrivateBook(deleteButton.dataset.privateDelete);
+    }
+  });
+};
 
 $("#closeReader").addEventListener("click", () => {
   stopSpeech();
