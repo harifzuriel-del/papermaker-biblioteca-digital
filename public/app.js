@@ -2,7 +2,7 @@ const $ = (s) => document.querySelector(s);
 
 const state = {
   books: [],
-  privateBooks: [],f
+  privateBooks: [],
   privateProgress: {},
   user: null,
   authMode: "login",
