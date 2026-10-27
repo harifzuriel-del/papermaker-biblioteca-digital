@@ -2,7 +2,7 @@ const $ = (s) => document.querySelector(s);
 
 const state = {
   books: [],
-  privateBooks: [],
+  privateBooks: [],f
   privateProgress: {},
   user: null,
   authMode: "login",
@@ -670,8 +670,15 @@ $("#switchAuth").addEventListener("click", () => {
 
 $("#authForm").addEventListener("submit", submitAuth);
 
-$("#importBookButton").addEventListener("click", openImportDialog);
-$("#importBookForm").addEventListener("submit", importPrivateBook);
+const importBookButton = $("#importBookButton");
+if (importBookButton) {
+  importBookButton.addEventListener("click", openImportDialog);
+}
+
+const importBookForm = $("#importBookForm");
+if (importBookForm) {
+  importBookForm.addEventListener("submit", importPrivateBook);
+}
 
 $("#privateBookGrid").addEventListener("click", e => {
   const readButton = e.target.closest("[data-private-read]");
