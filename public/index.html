@@ -1,71 +1,834 @@
-<!doctype html>
-<html lang="es-MX">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#171923">
-  <meta name="description" content="PaperMaker Biblioteca Digital: clásicos, cultura y lectura para todos.">
-  <title>PaperMaker Biblioteca Digital</title>
-  <link rel="stylesheet" href="/styles.css">
-</head>
-<body>
-  <header class="topbar">
-    <a class="brand" href="/" aria-label="PaperMaker Biblioteca Digital, inicio"><span class="brand-mark">P<span>♥</span>M</span><span>PaperMaker <small>Biblioteca Digital</small></span></a>
-    <nav class="nav"><a href="#catalogo">Biblioteca</a><a href="#acerca">Acerca de</a><button id="accountButton" class="button button-outline">Iniciar sesión</button></nav>
-  </header>
-  <main>
-    <section class="hero">
-      <div class="hero-copy">
-        <p class="eyebrow">LEER · ESCUCHAR · DESCUBRIR</p>
-        <h1>Un mundo de historias,<br><em>a tu alcance.</em></h1>
-        <p class="hero-lead">Explora lecturas, descubre nuevas ideas y continúa donde te quedaste, desde tus dispositivos.</p>
-        <div class="hero-actions"><a class="button" href="#catalogo">Explorar biblioteca <span aria-hidden="true">→</span></a><button id="heroAccount" class="button button-light">Crear cuenta gratis</button></div>
-        <p class="small muted">Tu biblioteca personal, estés donde estés.</p>
+const $ = (s) => document.querySelector(s);
+
+const state = {
+  books: [],
+  privateBooks: [],
+  privateProgress: {},
+  user: null,
+  authMode: "login",
+  currentBook: null,
+  content: null,
+  chapter: 0,
+  fontSize: 19,
+  progress: {},
+  saveTimer: null,
+  utterance: null,
+  isRestoringProgress: false
+};
+
+const esc = (value) =>
+  String(value ?? "").replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+
+async function api(path, options = {}) {
+  const response = await fetch(path, {
+    credentials: "same-origin",
+    ...options,
+    headers: {
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.headers || {})
+    }
+  });
+
+  let data = {};
+  try { data = await response.json(); } catch {}
+  if (!response.ok) throw new Error(data.error || data.message || `Error ${response.status}`);
+  return data;
+}
+
+function toast(message) {
+  const el = $("#toast");
+  if (!el) return;
+  el.textContent = message;
+  el.classList.add("show");
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => el.classList.remove("show"), 3000);
+}
+
+function cover(book) {
+  return `<div class="cover" style="background:${esc(book.cover_color || "#e9e4d8")}">
+    <div class="cover-mark"><span>PM / ${esc((book.category || "").toUpperCase())}</span>
+    <b>${esc(book.title)}</b><small>PAPERMAKER · BIBLIOTECA</small></div>
+  </div>`;
+}
+
+/* CATÁLOGO PÚBLICO */
+function renderBooks() {
+  const searchInput = $("#searchInput");
+  const categorySelect = $("#categorySelect");
+  const catalogCount = $("#catalogCount");
+  const bookGrid = $("#bookGrid");
+  if (!bookGrid) return;
+
+  const query = (searchInput?.value || "").trim().toLocaleLowerCase("es-MX");
+  const category = categorySelect?.value || "Todas";
+
+  const books = state.books.filter(b =>
+    (!query || `${b.title} ${b.author} ${b.description || ""} ${b.category || ""}`
+      .toLocaleLowerCase("es-MX").includes(query)) &&
+    (category === "Todas" || b.category === category)
+  );
+
+  if (catalogCount) catalogCount.textContent = `${books.length} ${books.length === 1 ? "libro" : "libros"}`;
+  bookGrid.innerHTML = books.length ? books.map(b => `
+    <article class="book-card">
+      ${cover(b)}
+      <div class="card-body">
+        <span class="category-pill">${esc(b.category)}</span>
+        <h3>${esc(b.title)}</h3>
+        <p class="author">por ${esc(b.author)}</p>
+        <p class="description">${esc(b.description || "")}</p>
+        <div class="card-footer">
+          <span class="card-type">Lectura digital</span>
+          <button class="read-button" data-read="${esc(b.id)}">Leer ahora →</button>
+        </div>
       </div>
-      <div class="hero-art" aria-hidden="true"><div class="sun"></div><div class="book book-back"></div><div class="book book-mid"></div><div class="book book-front"><span>PM</span><b>Historias<br>por descubrir</b><small>BIBLIOTECA DIGITAL</small></div><div class="spark spark-one">✳</div><div class="spark spark-two">✦</div></div>
-    </section>
+    </article>`).join("") :
+    `<div class="empty-state">No encontramos libros con esa búsqueda. Prueba con otra palabra.</div>`;
+}
 
-    <section class="features" aria-label="Funciones">
-      <article><span class="feature-icon">▤</span><div><h3>Lee a tu ritmo</h3><p>Texto cómodo, capítulos y ajustes de lectura.</p></div></article>
-      <article><span class="feature-icon">♫</span><div><h3>Escucha en voz alta</h3><p>Prueba la narración disponible en tu dispositivo.</p></div></article>
-      <article><span class="feature-icon">↗</span><div><h3>Continúa en otro dispositivo</h3><p>Inicia sesión para sincronizar tu progreso.</p></div></article>
-    </section>
+async function loadBooks() {
+  try {
+    const data = await api("/api/books");
+    state.books = data.books || [];
+    const cats = [...new Set(state.books.map(b => b.category).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, "es"));
+    const categorySelect = $("#categorySelect");
+    if (categorySelect) {
+      const previousCategory = categorySelect.value || "Todas";
+      categorySelect.innerHTML =
+        `<option>Todas</option>` + cats.map(c => `<option>${esc(c)}</option>`).join("");
+      if (cats.includes(previousCategory)) categorySelect.value = previousCategory;
+    }
+    renderBooks();
+  } catch (e) {
+    const catalogCount = $("#catalogCount");
+    const bookGrid = $("#bookGrid");
+    if (catalogCount) catalogCount.textContent = "No se pudo cargar";
+    if (bookGrid) bookGrid.innerHTML = `<div class="empty-state">
+      No pudimos conectar con la biblioteca. Comprueba que la API y la base D1 estén configuradas.
+      <br><br><small>${esc(e.message)}</small></div>`;
+  }
+}
 
-    <section id="catalogo" class="catalog-section">
-      <div class="section-heading"><div><p class="eyebrow">ENCUENTRA TU PRÓXIMA LECTURA</p><h2>La biblioteca</h2></div><p class="muted" id="catalogCount">Cargando libros…</p></div>
-      <div class="catalog-controls"><label class="search-box"><span>⌕</span><input id="searchInput" type="search" placeholder="Buscar por título, autor o tema…" aria-label="Buscar libros"></label><select id="categorySelect" aria-label="Filtrar por categoría"><option>Todas</option></select></div>
-      <div id="bookGrid" class="book-grid"><div class="loading">Preparando la biblioteca…</div></div>
-      <p class="notice">Los títulos iniciales son lecturas de muestra. Antes de publicar obras de terceros, verifica sus derechos y las condiciones de distribución aplicables en México.</p>
-    </section>
+/* BIBLIOTECA PRIVADA */
+async function loadPrivateBooks() {
+  const section = $("#mis-libros");
+  const grid = $("#privateBookGrid");
+  if (!section || !grid) return;
 
-    <section id="acerca" class="about">
-      <div><p class="eyebrow">UNA INICIATIVA PAPERMAKER</p><h2>La lectura nos conecta.</h2></div>
-      <div><p>PaperMaker Biblioteca Digital nace para acercar la lectura y la cultura a más personas. Más adelante podrás encontrar recomendaciones, materiales educativos y enlaces a los servicios de PaperMaker.</p><a class="text-link" href="https://papermaker.66ghz.com" target="_blank" rel="noopener noreferrer">Conoce PaperMaker <span>↗</span></a></div>
-    </section>
-  </main>
-  <footer><a class="brand footer-brand" href="/"><span class="brand-mark">P<span>♥</span>M</span><span>PaperMaker <small>Biblioteca Digital</small></span></a><span>Leer · Escuchar · Aprender</span><span>© <span id="year"></span> PaperMaker</span></footer>
+  if (!state.user) {
+    section.classList.add("hidden");
+    state.privateBooks = [];
+    state.privateProgress = {};
+    grid.innerHTML = "";
+    return;
+  }
 
-  <dialog id="authDialog" class="dialog">
-    <form method="dialog" class="dialog-close"><button aria-label="Cerrar">×</button></form>
-    <p class="eyebrow">TU ESPACIO DE LECTURA</p><h2 id="authTitle">Inicia sesión</h2><p id="authIntro" class="muted">Continúa donde te quedaste.</p>
-    <form id="authForm" class="auth-form">
-      <label id="nameField" class="field hidden">Nombre<input name="name" autocomplete="name" minlength="2" maxlength="80"></label>
-      <label class="field">Correo electrónico<input name="email" type="email" autocomplete="email" required maxlength="190"></label>
-      <label class="field">Contraseña<input name="password" type="password" autocomplete="current-password" minlength="10" maxlength="200" required></label>
-      <p class="form-help">Usa una contraseña de al menos 10 caracteres.</p>
-      <p id="authError" class="error" role="alert"></p>
-      <button id="authSubmit" class="button button-full" type="submit">Iniciar sesión</button>
-    </form>
-    <p class="switch-auth"><span id="switchLabel">¿Aún no tienes cuenta?</span> <button id="switchAuth" class="inline-button">Crear cuenta</button></p>
-  </dialog>
+  section.classList.remove("hidden");
+  grid.innerHTML = '<div class="loading">Cargando tus libros…</div>';
 
-  <dialog id="readerDialog" class="reader-dialog">
-    <div class="reader-toolbar"><button id="closeReader" class="icon-button" aria-label="Cerrar libro">← <span>Biblioteca</span></button><div class="reader-actions"><button id="fontDown" class="icon-button" aria-label="Reducir tamaño de letra">A−</button><button id="fontUp" class="icon-button" aria-label="Aumentar tamaño de letra">A+</button><button id="themeToggle" class="icon-button" aria-label="Cambiar tema">◐</button></div></div>
-    <div class="reader-layout"><aside class="reader-side"><p class="eyebrow">LEYENDO</p><h3 id="readerBookTitle"></h3><p id="readerAuthor" class="muted"></p><hr><p class="eyebrow">CAPÍTULOS</p><div id="chapterList" class="chapter-list"></div><div class="reader-sync" id="syncStatus">Inicia sesión para sincronizar tu progreso.</div></aside><article class="reader-content"><p class="eyebrow" id="readerCategory"></p><h1 id="chapterTitle"></h1><div id="readerText" class="reader-text"></div><div class="reader-bottom"><button id="listenButton" class="button button-light">▶ Escuchar capítulo</button><div class="chapter-nav"><button id="prevChapter" class="button button-outline">Anterior</button><button id="nextChapter" class="button">Siguiente capítulo →</button></div></div><p class="muted small" id="readerRights"></p></article></div>
-  </dialog>
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="/app.js" defer></script>
+  try {
+    const data = await api("/api/private-books");
+    state.privateBooks = data.books || [];
+    renderPrivateBooks();
+  } catch (error) {
+    grid.innerHTML = `<div class="empty-state">No se pudieron cargar tus libros privados.
+      <br><br>${esc(error.message)}</div>`;
+  }
+}
 
-</body>
-</html>
+function renderPrivateBooks() {
+  const grid = $("#privateBookGrid");
+  if (!grid) return;
+  if (!state.user) { grid.innerHTML = ""; return; }
+
+  if (!state.privateBooks.length) {
+    grid.innerHTML = `<div class="empty-state">Todavía no tienes libros privados.
+      <br><br>Importa tu primer archivo TXT o PDF para comenzar.</div>`;
+    return;
+  }
+
+  grid.innerHTML = state.privateBooks.map(book => `
+    <article class="book-card">
+      <div class="cover"><div class="cover-mark">
+        <span>PAPERMAKER · PRIVADO</span><b>${esc(book.title)}</b><small>${esc(book.author)}</small>
+      </div></div>
+      <div class="card-body">
+        <span class="category-pill">Mi biblioteca</span><h3>${esc(book.title)}</h3>
+        <p class="author">por ${esc(book.author)}</p>
+        <div class="card-footer">
+          <button class="read-button" data-private-read="${esc(book.id)}">Leer ahora →</button>
+          <button class="button button-outline" data-private-delete="${esc(book.id)}"
+            aria-label="Eliminar ${esc(book.title)}">Eliminar</button>
+        </div>
+      </div>
+    </article>`).join("");
+}
+
+function splitTextIntoChapters(text) {
+  const normalized = text.replace(/\r\n?/g, "\n").replace(/\u0000/g, "").trim();
+  if (!normalized) throw new Error("El archivo no contiene texto legible.");
+
+  const lines = normalized.split("\n");
+  const chapterPattern = /^\s*(?:cap[ií]tulo|chapter)\s+(?:\d+|[ivxlcdm]+)\b.*$/i;
+  const chapters = [];
+  let currentTitle = "Texto inicial";
+  let paragraphs = [];
+
+  function saveChapter() {
+    const cleaned = paragraphs.join("\n")
+      .split(/\n\s*\n+/)
+      .map(p => p.replace(/\s*\n\s*/g, " ").trim())
+      .filter(Boolean);
+    if (cleaned.length) chapters.push({ title: currentTitle, paragraphs: cleaned });
+    paragraphs = [];
+  }
+
+  for (const line of lines) {
+    if (chapterPattern.test(line)) {
+      if (paragraphs.length) saveChapter();
+      currentTitle = line.trim();
+    } else {
+      paragraphs.push(line);
+    }
+  }
+  saveChapter();
+
+  if (!chapters.length) chapters.push({ title: "Capítulo 1", paragraphs: [normalized] });
+  if (chapters.length > 1000) throw new Error("El archivo contiene más de 1,000 capítulos.");
+
+  const total = chapters.reduce((sum, ch) =>
+    sum + ch.paragraphs.reduce((n, p) => n + p.length, 0), 0);
+  if (total > 1000000) throw new Error("El libro supera el límite de un millón de caracteres.");
+  return { chapters };
+}
+
+async function extractImportedText(file) {
+  const extension = file.name.split(".").pop().toLowerCase();
+  if (extension === "txt") return await file.text();
+  if (extension !== "pdf") throw new Error("Selecciona un archivo TXT o PDF.");
+  if (!window.pdfjsLib) throw new Error("No se pudo cargar PDF.js. Recarga la página e inténtalo de nuevo.");
+
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+  const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  const pages = [];
+
+  for (let n = 1; n <= pdf.numPages; n++) {
+    const page = await pdf.getPage(n);
+    const content = await page.getTextContent();
+    const items = content.items.filter(x => typeof x.str === "string")
+      .map(x => ({ text: x.str, y: x.transform ? x.transform[5] : 0 }));
+
+    let pageText = "";
+    let previousY = null;
+    for (const item of items) {
+      if (previousY !== null && Math.abs(item.y - previousY) > 4) pageText += "\n";
+      else if (pageText && !pageText.endsWith("\n")) pageText += " ";
+      pageText += item.text;
+      previousY = item.y;
+    }
+    pages.push(pageText);
+  }
+
+  const text = pages.join("\n\n");
+  if (!text.trim()) throw new Error("Este PDF no contiene texto extraíble. Si es un escaneo, necesitará OCR.");
+  return text;
+}
+
+async function importPrivateBook(event) {
+  event.preventDefault();
+  const errorEl = $("#importBookError");
+  const button = $("#savePrivateBookButton");
+  if (errorEl) errorEl.textContent = "";
+
+  if (!state.user) {
+    const importDialog = $("#importBookDialog");
+    if (importDialog?.open) importDialog.close();
+    openAuth("login");
+    return;
+  }
+
+  const titleInput = $("#privateBookTitle");
+  const authorInput = $("#privateBookAuthor");
+  const fileInput = $("#privateBookFile");
+  const form = $("#importBookForm");
+  if (!errorEl || !button || !titleInput || !authorInput || !fileInput || !form) {
+    toast("El formulario para importar libros no está disponible en esta página.");
+    return;
+  }
+
+  const title = titleInput.value.trim();
+  const author = authorInput.value.trim();
+  const file = fileInput.files?.[0];
+  if (!title || !author || !file) {
+    errorEl.textContent = "Completa el título, el autor y selecciona un archivo.";
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = "Procesando archivo…";
+  try {
+    const content = splitTextIntoChapters(await extractImportedText(file));
+    button.textContent = "Guardando libro…";
+    const result = await api("/api/private-books", {
+      method: "POST",
+      body: JSON.stringify({ title, author, content })
+    });
+    
+      state.privateBooks.unshift(result.book);
+    renderPrivateBooks();
+    form.reset();
+    const importDialog = $("#importBookDialog");
+    if (importDialog?.open) importDialog.close();
+    toast("Libro importado correctamente.");
+  } catch (error) {
+    console.error("Error al importar el libro:", error);
+    errorEl.textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = button.dataset.originalText || "Importar a mi biblioteca";
+  }
+}
+
+function openImportDialog() {
+  if (!state.user) {
+    openAuth("login");
+    toast("Inicia sesión para importar libros privados.");
+    return;
+  }
+  const errorEl = $("#importBookError");
+  const dialog = $("#importBookDialog");
+  if (!dialog) {
+    toast("La opción de importar libros aún no está incluida en esta página.");
+    return;
+  }
+  if (errorEl) errorEl.textContent = "";
+  if (!dialog.open) dialog.showModal();
+}
+
+async function deletePrivateBook(id) {
+  const book = state.privateBooks.find(b => String(b.id) === String(id));
+  if (!book || !confirm(`¿Eliminar "${book.title}" de tus libros privados?`)) return;
+
+  try {
+    await api(`/api/private-books/${encodeURIComponent(id)}`, { method: "DELETE" });
+    state.privateBooks = state.privateBooks.filter(b => String(b.id) !== String(id));
+
+    if (state.currentBook?.isPrivate && String(state.currentBook.id) === String(id)) {
+      clearTimeout(state.saveTimer);
+      stopSpeech();
+      const readerDialog = $("#readerDialog");
+      if (readerDialog?.open) readerDialog.close();
+      state.currentBook = null;
+      state.content = null;
+    }
+
+    renderPrivateBooks();
+    toast("Libro privado eliminado.");
+  } catch (error) {
+    toast(error.message);
+  }
+}
+
+/* AUTENTICACIÓN */
+function setAuthMode(mode) {
+  state.authMode = mode;
+  const register = mode === "register";
+  const setText = (selector, value) => { const el = $(selector); if (el) el.textContent = value; };
+  setText("#authTitle", register ? "Crea tu cuenta" : "Inicia sesión");
+  setText("#authIntro", register
+    ? "Guarda tu progreso y continúa leyendo en otros dispositivos."
+    : "Continúa donde te quedaste.");
+  const nameField = $("#nameField");
+  if (nameField) nameField.classList.toggle("hidden", !register);
+  const nameInput = $("#nameField input");
+  if (nameInput) nameInput.required = register;
+  const passwordInput = $("#authForm [name=password]");
+  if (passwordInput) passwordInput.autocomplete = register ? "new-password" : "current-password";
+  setText("#authSubmit", register ? "Crear cuenta gratis" : "Iniciar sesión");
+  setText("#switchLabel", register ? "¿Ya tienes cuenta?" : "¿Aún no tienes cuenta?");
+  setText("#switchAuth", register ? "Iniciar sesión" : "Crear cuenta");
+  setText("#authError", "");
+}
+
+function openAuth(mode = "login") {
+  setAuthMode(mode);
+  const dialog = $("#authDialog");
+  if (dialog && !dialog.open) dialog.showModal();
+}
+
+function renderAccount() {
+  const accountButton = $("#accountButton");
+  const heroAccount = $("#heroAccount");
+  if (accountButton) accountButton.textContent = state.user
+    ? `Hola, ${(state.user.name || "lector").split(/\s+/)[0]}`
+    : "Iniciar sesión";
+  if (heroAccount) heroAccount.textContent = state.user ? "Mi cuenta" : "Crear cuenta gratis";
+
+  const syncStatus = $("#syncStatus");
+  if (state.user && syncStatus) {
+    syncStatus.textContent =
+      `Sesión iniciada como ${state.user.name || "lector"}. Tu progreso se sincroniza cuando hay conexión.`;
+  }
+}
+
+async function refreshUser() {
+  try {
+    const data = await api("/api/auth/me");
+    state.user = data.user;
+    if (state.user) {
+      const p = await api("/api/progress");
+      state.progress = Object.fromEntries((p.progress || []).map(x => [String(x.bookId), x]));
+    }
+  } catch {
+    state.user = null;
+    state.progress = {};
+  }
+
+  renderAccount();
+  await loadPrivateBooks();
+}
+
+async function submitAuth(event) {
+  event.preventDefault();
+  const authError = $("#authError");
+  const authForm = $("#authForm");
+  const authSubmit = $("#authSubmit");
+  const authDialog = $("#authDialog");
+  if (!authForm || !authSubmit) return;
+  if (authError) authError.textContent = "";
+
+  const body = Object.fromEntries(new FormData(authForm).entries());
+  const mode = state.authMode;
+  const path = mode === "register" ? "/api/auth/register" : "/api/auth/login";
+
+  authSubmit.disabled = true;
+  authSubmit.textContent = "Un momento…";
+
+  try {
+    const data = await api(path, { method: "POST", body: JSON.stringify(body) });
+    state.user = data.user;
+
+    try {
+      const p = await api("/api/progress");
+      state.progress = Object.fromEntries((p.progress || []).map(x => [String(x.bookId), x]));
+    } catch (e) {
+      console.error("Error al cargar el progreso:", e);
+      toast("Sesión iniciada, pero no se pudo cargar el progreso público.");
+    }
+
+    if (authDialog?.open) authDialog.close();
+    authForm.reset();
+    renderAccount();
+    await loadPrivateBooks();
+    toast(mode === "register" ? "¡Cuenta creada! Ya puedes leer." : "Sesión iniciada.");
+
+    if (state.currentBook) {
+      if (state.currentBook.isPrivate) await syncPrivateProgressFromServer(state.currentBook.id);
+      else await syncProgressFromServer(state.currentBook.id);
+    }
+  } catch (e) {
+    console.error("Error de autenticación:", e);
+    if (authError) authError.textContent = e.message;
+  } finally {
+    authSubmit.disabled = false;
+    authSubmit.textContent = mode === "register" ? "Crear cuenta gratis" : "Iniciar sesión";
+  }
+}
+
+async function logout() {
+  try { await api("/api/auth/logout", { method: "POST" }); } catch {}
+
+  clearTimeout(state.saveTimer);
+  state.user = null;
+  state.progress = {};
+  state.privateProgress = {};
+  state.privateBooks = [];
+
+  if (state.currentBook?.isPrivate) {
+    stopSpeech();
+    const readerDialog = $("#readerDialog");
+    if (readerDialog?.open) readerDialog.close();
+    state.currentBook = null;
+    state.content = null;
+  }
+
+  renderAccount();
+  await loadPrivateBooks();
+  toast("Has cerrado sesión.");
+}
+
+/* PROGRESO DE LECTURA */
+function getReaderScrollContainer() {
+  return $("#readerDialog");
+}
+
+function getReadingPosition() {
+  const container = getReaderScrollContainer();
+  return container ? Math.max(0, Math.round(container.scrollTop)) : 0;
+}
+
+function restoreReadingPosition(position) {
+  const container = getReaderScrollContainer();
+  if (container) container.scrollTop = Math.max(0, Number(position) || 0);
+}
+
+function queueProgressSave() {
+  if (!state.user || !state.currentBook || state.isRestoringProgress) return;
+  clearTimeout(state.saveTimer);
+
+  state.saveTimer = setTimeout(async () => {
+    const book = state.currentBook;
+    if (!book || !state.user) return;
+
+    const payload = { chapter: state.chapter, position: getReadingPosition() };
+    const isPrivate = book.isPrivate === true;
+    const endpoint = isPrivate
+      ? `/api/private-progress/${encodeURIComponent(book.id)}`
+      : `/api/progress/${encodeURIComponent(book.id)}`;
+
+    try {
+      await api(endpoint, { method: "PUT", body: JSON.stringify(payload) });
+      const entry = { bookId: book.id, ...payload, updatedAt: new Date().toISOString() };
+      if (isPrivate) state.privateProgress[String(book.id)] = entry;
+      else state.progress[String(book.id)] = entry;
+      const syncStatus = $("#syncStatus");
+      if (syncStatus) syncStatus.textContent = "Progreso guardado en tu cuenta.";
+    } catch (error) {
+      console.error("Error al guardar el progreso:", error);
+      const syncStatus = $("#syncStatus");
+      if (syncStatus) syncStatus.textContent = "No se pudo sincronizar. Comprueba tu conexión.";
+    }
+  }, 700);
+}
+
+async function syncPrivateProgressFromServer(bookId) {
+  if (!state.user) return;
+  state.isRestoringProgress = true;
+  clearTimeout(state.saveTimer);
+
+  try {
+    const data = await api("/api/private-progress");
+    state.privateProgress = Object.fromEntries(
+      (data.progress || []).map(item => [String(item.bookId), item])
+    );
+    const saved = state.privateProgress[String(bookId)];
+
+    if (saved && String(state.currentBook?.id) === String(bookId) &&
+        state.currentBook?.isPrivate && state.content?.chapters?.length) {
+      state.chapter = Math.max(0, Math.min(Number(saved.chapter) || 0, state.content.chapters.length - 1));
+      renderChapter();
+      restoreReadingPosition(saved.position);
+    }
+    const syncStatus = $("#syncStatus");
+    if (syncStatus) syncStatus.textContent = "Progreso del libro privado sincronizado.";
+  } catch (error) {
+    console.error("Error al sincronizar el progreso privado:", error);
+    const syncStatus = $("#syncStatus");
+    if (syncStatus) syncStatus.textContent = "No se pudo sincronizar el progreso privado.";
+  } finally {
+    state.isRestoringProgress = false;
+    if (state.currentBook?.isPrivate && String(state.currentBook.id) === String(bookId) && state.user) {
+      queueProgressSave();
+    }
+  }
+}
+
+async function syncProgressFromServer(bookId) {
+  if (!state.user) return;
+  state.isRestoringProgress = true;
+  clearTimeout(state.saveTimer);
+
+  try {
+    const data = await api("/api/progress");
+    state.progress = Object.fromEntries((data.progress || []).map(x => [String(x.bookId), x]));
+    const saved = state.progress[String(bookId)];
+
+    if (saved && String(state.currentBook?.id) === String(bookId) &&
+        !state.currentBook?.isPrivate && state.content?.chapters?.length) {
+      state.chapter = Math.max(0, Math.min(Number(saved.chapter) || 0, state.content.chapters.length - 1));
+      renderChapter();
+      restoreReadingPosition(saved.position);
+    }
+    const syncStatus = $("#syncStatus");
+    if (syncStatus) syncStatus.textContent = "Progreso sincronizado con tu cuenta.";
+  } catch (e) {
+    console.error("Error al sincronizar el progreso:", e);
+    const syncStatus = $("#syncStatus");
+    if (syncStatus) syncStatus.textContent = "No se pudo sincronizar tu progreso.";
+  } finally {
+    state.isRestoringProgress = false;
+    if (!state.currentBook?.isPrivate && String(state.currentBook?.id) === String(bookId) && state.user) {
+      queueProgressSave();
+    }
+  }
+}
+
+/* LECTOR */
+async function openBook(id) {
+  try {
+    const data = await api(`/api/books/${encodeURIComponent(id)}`);
+    clearTimeout(state.saveTimer);
+    stopSpeech();
+
+    state.currentBook = { ...data.book, isPrivate: false };
+    state.content = data.content;
+    state.chapter = 0;
+
+    $("#readerBookTitle").textContent = data.book.title;
+    $("#readerAuthor").textContent = `por ${data.book.author}`;
+    $("#readerCategory").textContent = data.book.category;
+    $("#readerRights").textContent = data.book.rights_note;
+
+    $("#readerDialog").showModal();
+    document.body.classList.add("reader-open");
+    renderChapter();
+
+    if (state.user) await syncProgressFromServer(id);
+    else {
+      const syncStatus = $("#syncStatus");
+      if (syncStatus) syncStatus.textContent = "Inicia sesión para sincronizar tu progreso entre dispositivos.";
+    }
+  } catch (e) {
+    console.error("Error al abrir el libro:", e);
+    toast(e.message);
+  }
+}
+
+async function openPrivateBook(id) {
+  try {
+    const data = await api(`/api/private-books/${encodeURIComponent(id)}`);
+    clearTimeout(state.saveTimer);
+    stopSpeech();
+
+    state.currentBook = {
+      ...data.book,
+      category: "Mi biblioteca privada",
+      rights_note: "Libro privado de tu cuenta.",
+      isPrivate: true
+    };
+    state.content = data.content;
+    state.chapter = 0;
+
+    $("#readerBookTitle").textContent = data.book.title;
+    $("#readerAuthor").textContent = `por ${data.book.author}`;
+    $("#readerCategory").textContent = "Mi biblioteca privada";
+    $("#readerRights").textContent = "Libro privado de tu cuenta.";
+
+    $("#readerDialog").showModal();
+    document.body.classList.add("reader-open");
+    renderChapter();
+
+    if (state.user) await syncPrivateProgressFromServer(id);
+    else {
+      const syncStatus = $("#syncStatus");
+      if (syncStatus) syncStatus.textContent = "Inicia sesión para guardar tu progreso.";
+    }
+  } catch (error) {
+    console.error("Error al abrir el libro privado:", error);
+    toast(error.message);
+  }
+}
+
+function renderChapter() {
+  if (!state.content?.chapters?.length) return;
+
+  const chapters = state.content.chapters;
+  state.chapter = Math.max(0, Math.min(state.chapter, chapters.length - 1));
+  const chapter = chapters[state.chapter];
+
+  $("#chapterTitle").textContent = chapter.title;
+  $("#readerText").innerHTML = (chapter.paragraphs || []).map(p => `<p>${esc(p)}</p>`).join("");
+  $("#readerText").style.fontSize = `${state.fontSize}px`;
+
+  $("#chapterList").innerHTML = chapters.map((c, i) => `
+    <button class="chapter-item ${i === state.chapter ? "active" : ""}" data-chapter="${i}">
+      ${i + 1}. ${esc(c.title)}
+    </button>`).join("");
+
+  $("#prevChapter").disabled = state.chapter === 0;
+  $("#nextChapter").disabled = state.chapter >= chapters.length - 1;
+  $("#nextChapter").textContent = state.chapter >= chapters.length - 1
+    ? "Fin del libro" : "Siguiente capítulo →";
+
+  const container = getReaderScrollContainer();
+  if (container) container.scrollTop = 0;
+  queueProgressSave();
+}
+
+/* VOZ */
+function stopSpeech() {
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  state.utterance = null;
+  const button = $("#listenButton");
+  if (button) button.textContent = "▶ Escuchar capítulo";
+}
+
+function toggleSpeech() {
+  if (!("speechSynthesis" in window)) {
+    toast("Este navegador no ofrece narración de texto.");
+    return;
+  }
+  if (window.speechSynthesis.speaking) {
+    stopSpeech();
+    return;
+  }
+
+  const chapter = state.content?.chapters?.[state.chapter];
+  if (!chapter) return;
+
+  const utterance = new SpeechSynthesisUtterance(
+    `${chapter.title}. ${(chapter.paragraphs || []).join(". ")}`
+  );
+  utterance.lang = "es-MX";
+  utterance.rate = 0.92;
+  utterance.onend = () => {
+    state.utterance = null;
+    const button = $("#listenButton");
+    if (button) button.textContent = "▶ Escuchar capítulo";
+  };
+  utterance.onerror = () => {
+    state.utterance = null;
+    const button = $("#listenButton");
+    if (button) button.textContent = "▶ Escuchar capítulo";
+    toast("No se pudo reproducir la voz en este dispositivo.");
+  };
+
+  state.utterance = utterance;
+  window.speechSynthesis.speak(utterance);
+  const button = $("#listenButton");
+  if (button) button.textContent = "Ⅱ Detener narración";
+}
+
+/* EVENTOS SEGUROS */
+function bindEvent(selector, eventName, handler, options) {
+  const element = $(selector);
+  if (element) element.addEventListener(eventName, handler, options);
+}
+
+// Catálogo público
+bindEvent("#searchInput", "input", renderBooks);
+bindEvent("#categorySelect", "change", renderBooks);
+
+bindEvent("#bookGrid", "click", event => {
+  const button = event.target.closest("[data-read]");
+  if (button) openBook(button.dataset.read);
+});
+
+// Cuenta y autenticación
+bindEvent("#accountButton", "click", () => {
+  if (state.user) {
+    if (confirm("¿Quieres cerrar tu sesión?")) logout();
+  } else {
+    openAuth("login");
+  }
+});
+
+bindEvent("#heroAccount", "click", () => {
+  if (state.user) {
+    toast("Tu progreso está asociado a tu cuenta.");
+  } else {
+    openAuth("register");
+  }
+});
+
+bindEvent("#switchAuth", "click", () => {
+  setAuthMode(state.authMode === "login" ? "register" : "login");
+});
+
+bindEvent("#authForm", "submit", submitAuth);
+
+// Importación de libros privados
+bindEvent("#importBookButton", "click", openImportDialog);
+bindEvent("#importBookForm", "submit", importPrivateBook);
+
+bindEvent("#closeImportBookDialog", "click", () => {
+  const dialog = $("#importBookDialog");
+  if (dialog) dialog.close();
+});
+
+// Acciones de la biblioteca privada
+bindEvent("#privateBookGrid", "click", event => {
+  const readButton = event.target.closest("[data-private-read]");
+  const deleteButton = event.target.closest("[data-private-delete]");
+
+  if (readButton) openPrivateBook(readButton.dataset.privateRead);
+  if (deleteButton) deletePrivateBook(deleteButton.dataset.privateDelete);
+});
+
+// Lector
+bindEvent("#closeReader", "click", () => {
+  stopSpeech();
+  const dialog = $("#readerDialog");
+  if (dialog?.open) dialog.close();
+  document.body.classList.remove("reader-open");
+});
+
+bindEvent("#readerDialog", "close", () => {
+  stopSpeech();
+  document.body.classList.remove("reader-open");
+});
+
+bindEvent("#readerDialog", "scroll", () => queueProgressSave(), { passive: true });
+
+bindEvent("#chapterList", "click", event => {
+  const button = event.target.closest("[data-chapter]");
+  if (button) {
+    stopSpeech();
+    state.chapter = Number(button.dataset.chapter);
+    renderChapter();
+  }
+});
+
+bindEvent("#prevChapter", "click", () => {
+  if (state.chapter > 0) {
+    stopSpeech();
+    state.chapter--;
+    renderChapter();
+  }
+});
+
+bindEvent("#nextChapter", "click", () => {
+  if (state.content && state.chapter < state.content.chapters.length - 1) {
+    stopSpeech();
+    state.chapter++;
+    renderChapter();
+  }
+});
+
+// Tamaño de letra
+bindEvent("#fontDown", "click", () => {
+  state.fontSize = Math.max(15, state.fontSize - 1);
+  const readerText = $("#readerText");
+  if (readerText) readerText.style.fontSize = `${state.fontSize}px`;
+});
+
+bindEvent("#fontUp", "click", () => {
+  state.fontSize = Math.min(28, state.fontSize + 1);
+  const readerText = $("#readerText");
+  if (readerText) readerText.style.fontSize = `${state.fontSize}px`;
+});
+
+// Tema y narración
+bindEvent("#themeToggle", "click", () => {
+  const dialog = $("#readerDialog");
+  if (dialog) dialog.classList.toggle("dark-reader");
+});
+
+bindEvent("#listenButton", "click", toggleSpeech);
+
+// Año del pie de página
+const yearElement = $("#year");
+if (yearElement) yearElement.textContent = new Date().getFullYear();
+
+// Inicialización
+(async function init() {
+  await Promise.all([
+    loadBooks(),
+    refreshUser()
+  ]);
+})();
