@@ -642,16 +642,27 @@ function toggleSpeech() {
   $("#listenButton").textContent = "Ⅱ Detener narración";
 }
 
-/* EVENTOS */
-$("#searchInput").addEventListener("input", renderBooks);
-$("#categorySelect").addEventListener("change", renderBooks);
+/* EVENTOS SEGUROS */
 
-$("#bookGrid").addEventListener("click", e => {
-  const btn = e.target.closest("[data-read]");
-  if (btn) openBook(btn.dataset.read);
+function bindEvent(selector, eventName, handler, options) {
+  const element = $(selector);
+
+  if (element) {
+    element.addEventListener(eventName, handler, options);
+  }
+}
+
+// Catálogo público
+bindEvent("#searchInput", "input", renderBooks);
+bindEvent("#categorySelect", "change", renderBooks);
+
+bindEvent("#bookGrid", "click", event => {
+  const button = event.target.closest("[data-read]");
+  if (button) openBook(button.dataset.read);
 });
 
-$("#accountButton").addEventListener("click", () => {
+// Cuenta y autenticación
+bindEvent("#accountButton", "click", () => {
   if (state.user) {
     if (confirm("¿Quieres cerrar tu sesión?")) logout();
   } else {
@@ -659,67 +670,76 @@ $("#accountButton").addEventListener("click", () => {
   }
 });
 
-$("#heroAccount").addEventListener("click", () => {
-  if (state.user) toast("Tu progreso está asociado a tu cuenta.");
-  else openAuth("register");
+bindEvent("#heroAccount", "click", () => {
+  if (state.user) {
+    toast("Tu progreso está asociado a tu cuenta.");
+  } else {
+    openAuth("register");
+  }
 });
 
-$("#switchAuth").addEventListener("click", () => {
+bindEvent("#switchAuth", "click", () => {
   setAuthMode(state.authMode === "login" ? "register" : "login");
 });
 
-$("#authForm").addEventListener("submit", submitAuth);
+bindEvent("#authForm", "submit", submitAuth);
 
-const importBookButton = $("#importBookButton");
-if (importBookButton) {
-  importBookButton.addEventListener("click", openImportDialog);
-}
+// Importación de libros privados
+bindEvent("#importBookButton", "click", openImportDialog);
+bindEvent("#importBookForm", "submit", importPrivateBook);
 
-const importBookForm = $("#importBookForm");
-if (importBookForm) {
-  importBookForm.addEventListener("submit", importPrivateBook);
-}
+bindEvent("#closeImportBookDialog", "click", () => {
+  const dialog = $("#importBookDialog");
+  if (dialog) dialog.close();
+});
 
-const privateBookGrid = $("#privateBookGrid");
+// Acciones de la biblioteca privada
+bindEvent("#privateBookGrid", "click", event => {
+  const readButton = event.target.closest("[data-private-read]");
+  const deleteButton = event.target.closest("[data-private-delete]");
 
-if (privateBookGrid) {
-  privateBookGrid.addEventListener("click", e => {
-    const readButton = e.target.closest("[data-private-read]");
-    const deleteButton = e.target.closest("[data-private-delete]");
+  if (readButton) {
+    openPrivateBook(readButton.dataset.privateRead);
+  }
 
-    if (readButton) {
-      openPrivateBook(readButton.dataset.privateRead);
-    }
+  if (deleteButton) {
+    deletePrivateBook(deleteButton.dataset.privateDelete);
+  }
+});
 
-    if (deleteButton) {
-      deletePrivateBook(deleteButton.dataset.privateDelete);
-    }
-  });
-};
-
-$("#closeReader").addEventListener("click", () => {
+// Lector
+bindEvent("#closeReader", "click", () => {
   stopSpeech();
-  $("#readerDialog").close();
+
+  const dialog = $("#readerDialog");
+  if (dialog?.open) dialog.close();
+
   document.body.classList.remove("reader-open");
 });
 
-$("#readerDialog").addEventListener("close", () => {
+bindEvent("#readerDialog", "close", () => {
   stopSpeech();
   document.body.classList.remove("reader-open");
 });
 
-$("#readerDialog").addEventListener("scroll", () => queueProgressSave(), { passive: true });
+bindEvent(
+  "#readerDialog",
+  "scroll",
+  () => queueProgressSave(),
+  { passive: true }
+);
 
-$("#chapterList").addEventListener("click", e => {
-  const btn = e.target.closest("[data-chapter]");
-  if (btn) {
+bindEvent("#chapterList", "click", event => {
+  const button = event.target.closest("[data-chapter]");
+
+  if (button) {
     stopSpeech();
-    state.chapter = Number(btn.dataset.chapter);
+    state.chapter = Number(button.dataset.chapter);
     renderChapter();
   }
 });
 
-$("#prevChapter").addEventListener("click", () => {
+bindEvent("#prevChapter", "click", () => {
   if (state.chapter > 0) {
     stopSpeech();
     state.chapter--;
@@ -727,28 +747,55 @@ $("#prevChapter").addEventListener("click", () => {
   }
 });
 
-$("#nextChapter").addEventListener("click", () => {
-  if (state.content && state.chapter < state.content.chapters.length - 1) {
+bindEvent("#nextChapter", "click", () => {
+  if (
+    state.content &&
+    state.chapter < state.content.chapters.length - 1
+  ) {
     stopSpeech();
     state.chapter++;
     renderChapter();
   }
 });
 
-$("#fontDown").addEventListener("click", () => {
+// Tamaño de letra
+bindEvent("#fontDown", "click", () => {
   state.fontSize = Math.max(15, state.fontSize - 1);
-  $("#readerText").style.fontSize = `${state.fontSize}px`;
+
+  const readerText = $("#readerText");
+  if (readerText) {
+    readerText.style.fontSize = `${state.fontSize}px`;
+  }
 });
 
-$("#fontUp").addEventListener("click", () => {
+bindEvent("#fontUp", "click", () => {
   state.fontSize = Math.min(28, state.fontSize + 1);
-  $("#readerText").style.fontSize = `${state.fontSize}px`;
+
+  const readerText = $("#readerText");
+  if (readerText) {
+    readerText.style.fontSize = `${state.fontSize}px`;
+  }
 });
 
-$("#themeToggle").addEventListener("click", () => $("#readerDialog").classList.toggle("dark-reader"));
-$("#listenButton").addEventListener("click", toggleSpeech);
-$("#year").textContent = new Date().getFullYear();
+// Tema y narración
+bindEvent("#themeToggle", "click", () => {
+  const dialog = $("#readerDialog");
+  if (dialog) dialog.classList.toggle("dark-reader");
+});
 
+bindEvent("#listenButton", "click", toggleSpeech);
+
+// Año del pie de página
+const yearElement = $("#year");
+
+if (yearElement) {
+  yearElement.textContent = new Date().getFullYear();
+}
+
+// Inicialización
 (async function init() {
-  await Promise.all([loadBooks(), refreshUser()]);
+  await Promise.all([
+    loadBooks(),
+    refreshUser()
+  ]);
 })();
