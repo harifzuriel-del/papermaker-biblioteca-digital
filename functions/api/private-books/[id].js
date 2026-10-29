@@ -6,14 +6,16 @@ import {
   sameOrigin
 } from "../_lib.js";
 
+
 async function ownedBook(env, userId, bookId) {
   return env.DB.prepare(
-    `SELECT id, title, author, content_json,
+    `SELECT id, title, author, language, content_json,
             created_at, updated_at
      FROM private_books
      WHERE id = ? AND user_id = ?`
   ).bind(bookId, userId).first();
 }
+
 
 function validContent(content) {
   if (
