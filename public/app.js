@@ -369,9 +369,10 @@ async function importPrivateBook(event) {
     return;
   }
 
-  const title = $("#privateBookTitle").value.trim();
-  const author = $("#privateBookAuthor").value.trim();
-  const file = $("#privateBookFile").files[0];
+const title = $("#privateBookTitle").value.trim();
+const author = $("#privateBookAuthor").value.trim();
+const language = $("#privateBookLanguage").value;
+const file = $("#privateBookFile").files[0];
   if (!title || !author || !file) {
     errorEl.textContent = "Completa el título, el autor y selecciona un archivo.";
     return;
@@ -382,10 +383,10 @@ async function importPrivateBook(event) {
     try {
     const content = splitTextIntoChapters(await extractImportedText(file));
     button.textContent = "Guardando libro…";
-    const result = await api("/api/private-books", {
-      method: "POST",
-      body: JSON.stringify({ title, author, content })
-    });
+   const result = await api("/api/private-books", {
+  method: "POST",
+  body: JSON.stringify({ title, author, language, content })
+});
     state.privateBooks.unshift(result.book);
     renderPrivateBooks();
     $("#importBookForm").reset();
