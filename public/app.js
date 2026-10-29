@@ -357,8 +357,10 @@ async function extractImportedText(file) {
   return text;
 }
 
+
 async function importPrivateBook(event) {
   event.preventDefault();
+
   const errorEl = $("#importBookError");
   const button = $("#savePrivateBookButton");
   errorEl.textContent = "";
@@ -369,28 +371,48 @@ async function importPrivateBook(event) {
     return;
   }
 
-const title = $("#privateBookTitle").value.trim();
-const author = $("#privateBookAuthor").value.trim();
-const language = $("#privateBookLanguage").value;
-const file = $("#privateBookFile").files[0];
+  const title = $("#privateBookTitle").value.trim();
+  const author = $("#privateBookAuthor").value.trim();
+  const language = $("#privateBookLanguage").value;
+  const file = $("#privateBookFile").files[0];
+
   if (!title || !author || !file) {
-    errorEl.textContent = "Completa el título, el autor y selecciona un archivo.";
+    errorEl.textContent =
+      "Completa el título, el autor y selecciona un archivo.";
+    return;
+  }
+
+  if (!["es", "en"].includes(language)) {
+    errorEl.textContent = "Selecciona un idioma válido.";
     return;
   }
 
   button.disabled = true;
   button.textContent = "Procesando archivo…";
-    try {
-    const content = splitTextIntoChapters(await extractImportedText(file));
+
+  try {
+    const content = splitTextIntoChapters(
+      await extractImportedText(file)
+    );
+
     button.textContent = "Guardando libro…";
-   const result = await api("/api/private-books", {
-  method: "POST",
-  body: JSON.stringify({ title, author, language, content })
-});
+
+    const result = await api("/api/private-books", {
+      method: "POST",
+      body: JSON.stringify({
+        title,
+        author,
+        language,
+        content
+      })
+    });
+
     state.privateBooks.unshift(result.book);
     renderPrivateBooks();
+
     $("#importBookForm").reset();
     $("#importBookDialog").close();
+
     toast("Libro importado correctamente.");
   } catch (error) {
     console.error("Error al importar el libro:", error);
@@ -400,6 +422,7 @@ const file = $("#privateBookFile").files[0];
     button.textContent = "Importar a mi biblioteca";
   }
 }
+v
 
 function openImportDialog() {
   if (!state.user) {
@@ -741,11 +764,13 @@ function stopSpeech() {
   if (button) button.textContent = "▶ Escuchar capítulo";
 }
 
+
 function toggleSpeech() {
   if (!("speechSynthesis" in window)) {
     toast("Este navegador no ofrece narración de texto.");
     return;
   }
+
   if (window.speechSynthesis.speaking) {
     stopSpeech();
     return;
@@ -757,12 +782,29 @@ function toggleSpeech() {
   const utterance = new SpeechSynthesisUtterance(
     `${chapter.title}. ${(chapter.paragraphs || []).join(". ")}`
   );
-  utterance.lang = "es-MX";
+
+  // Seleccionar el idioma original del libro.
+  const language =
+    state.currentBook?.language === "en" ? "en-US" : "es-MX";
+
+  utterance.lang = language;
   utterance.rate = 0.92;
+
+  // Elegir una voz compatible con el idioma, si está disponible.
+  const voices = window.speechSynthesis.getVoices();
+  const matchingVoice = voices.find(
+    voice => voice.lang.toLowerCase() === language.toLowerCase()
+  );
+
+  if (matchingVoice) {
+    utterance.voice = matchingVoice;
+  }
+
   utterance.onend = () => {
     state.utterance = null;
     $("#listenButton").textContent = "▶ Escuchar capítulo";
   };
+
   utterance.onerror = () => {
     state.utterance = null;
     $("#listenButton").textContent = "▶ Escuchar capítulo";
@@ -773,6 +815,7 @@ function toggleSpeech() {
   window.speechSynthesis.speak(utterance);
   $("#listenButton").textContent = "Ⅱ Detener narración";
 }
+
 
 /* EVENTOS SEGUROS */
 
