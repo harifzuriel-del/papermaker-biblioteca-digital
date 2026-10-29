@@ -92,9 +92,10 @@ export async function onRequestGet({ request, env }) {
   }
 
   const result = await env.DB.prepare(
-    `SELECT id, title, author, created_at AS createdAt,
-            updated_at AS updatedAt
-     FROM private_books
+    `SELECT id, title, author, language,
+        created_at AS createdAt,
+        updated_at AS updatedAt
+ FROM private_books
      WHERE user_id = ?
      ORDER BY updated_at DESC, title COLLATE NOCASE`
   ).bind(user.id).all();
