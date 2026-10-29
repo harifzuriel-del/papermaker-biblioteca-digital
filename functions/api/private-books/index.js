@@ -16,23 +16,33 @@ function validateBook(body) {
     return "Los datos del libro no son válidos.";
   }
 
-  const title =
-    typeof body.title === "string" ? body.title.trim() : "";
+  
+const title =
+  typeof body.title === "string" ? body.title.trim() : "";
 
-  const author =
-    typeof body.author === "string"
-      ? body.author.trim()
-      : "Autor desconocido";
+const author =
+  typeof body.author === "string"
+    ? body.author.trim()
+    : "Autor desconocido";
 
-  if (!title || title.length > 200) {
-    return "El título es obligatorio y no debe superar 200 caracteres.";
-  }
+const language =
+  typeof body.language === "string"
+    ? body.language.trim()
+    : "es";
 
-  if (!author || author.length > 200) {
-    return "El autor es obligatorio y no debe superar 200 caracteres.";
-  }
+if (!title || title.length > 200) {
+  return "El título es obligatorio y no debe superar 200 caracteres.";
+}
 
-  const content = body.content;
+if (!author || author.length > 200) {
+  return "El autor es obligatorio y no debe superar 200 caracteres.";
+}
+
+if (!["es", "en"].includes(language)) {
+  return "Selecciona un idioma válido.";
+}
+
+ const content = body.content;
 
   if (
     !content ||
@@ -117,26 +127,28 @@ const body = parsed.data;
     return json({ error: validationError }, 400);
   }
 
-  const title = body.title.trim();
-  const author = body.author.trim();
-  const contentJson = JSON.stringify(body.content);
+const title = body.title.trim();
+const author = body.author.trim();
+const language = body.language || "es";
+const contentJson = JSON.stringify(body.content);
 
   const id = randomId(16);
 
   await env.DB.prepare(
-    `INSERT INTO private_books
-       (id, user_id, title, author, content_json)
-     VALUES (?, ?, ?, ?, ?)`
-  ).bind(
-    id,
-    user.id,
-    title,
-    author,
-    contentJson
-  ).run();
+  `INSERT INTO private_books
+     (id, user_id, title, author, language, content_json)
+   VALUES (?, ?, ?, ?, ?, ?)`
+).bind(
+  id,
+  user.id,
+  title,
+  author,
+  language,
+  contentJson
+).run();
 
   return json({
-    ok: true,
-    book: { id, title, author }
-  }, 201);
+  ok: true,
+  book: { id, title, author, language }
+}, 201);
 }
