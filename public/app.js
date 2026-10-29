@@ -154,43 +154,174 @@ function renderPrivateBooks() {
     </article>`).join("");
 }
 
+
 function splitTextIntoChapters(text) {
-  const normalized = text.replace(/\r\n?/g, "\n").replace(/\u0000/g, "").trim();
-  if (!normalized) throw new Error("El archivo no contiene texto legible.");
+  const normalized = String(text || "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/\u0000/g, "")
+    .replace(/\u00a0/g, " ")
+    .trim();
+
+  if (!normalized) {
+    throw new Error("El archivo no contiene texto legible.");
+  }
 
   const lines = normalized.split("\n");
-  const chapterPattern = /^\s*(?:cap[ií]tulo|chapter)\s+(?:\d+|[ivxlcdm]+)\b.*$/i;
   const chapters = [];
+
   let currentTitle = "Texto inicial";
   let paragraphs = [];
 
+  // Encabezados explícitos de capítulos y secciones.
+  const numberedHeading =
+    /^\s*(?:(?:cap[ií]tulo|chapter)\s+(?:n[úu]mero\s+)?[\divxlcdm]+|(?:parte|part|secci[oó]n|section|libro|book)\s+(?:[\divxlcdm]+|[a-z]))(?:\s*[:.\-–—]\s*|\s+)?(.*)$/i;
+
+  // Secciones comunes de un libro.
+  const namedHeading =
+    /^\s*(pr[oó]logo|prefacio|introducci[oó]n|ep[ií]logo|conclusi[oó]n|agradecimientos|bibliograf[ií]a|ap[eé]ndice|dedicatoria|foreword|preface|introduction|epilogue|afterword|acknowledgments|acknowledgements|bibliography|appendix|dedication)\s*[:.]?\s*$/i;
+
+  // Evita confundir entradas del índice con capítulos reales.
+  const isContentsLine =
+    /^\s*(?:[ivxlcdm]+|\d+)?\s*(?:[.)-]\s*)?(?:cap[ií]tulo|chapter|parte|part|secci[oó]n|section)\b.*(?:\.{2,}|…{1,}|\s{2,}\d+\s*$)/i;
+
+  function cleanParagraphs(sourceLines) {
+    const result = [];
+    let buffer = [];
+
+    function flush() {
+      const paragraph = buffer
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (paragraph) result.push(paragraph);
+      buffer = [];
+    }
+
+    for (const rawLine of sourceLines) {
+      const line = rawLine.replace(/\s+/g, " ").trim();
+
+      if (!line) {
+        flush();
+        continue;
+      }
+
+      // Conserva los saltos entre párrafos sin dividir
+      // una frase por cada línea extraída del PDF.
+      buffer.push(line);
+    }
+
+    flush();
+    return result;
+  }
+
   function saveChapter() {
-    const cleaned = paragraphs.join("\n")
-      .split(/\n\s*\n+/)
-      .map(p => p.replace(/\s*\n\s*/g, " ").trim())
-      .filter(Boolean);
-    if (cleaned.length) chapters.push({ title: currentTitle, paragraphs: cleaned });
+    const cleaned = cleanParagraphs(paragraphs);
+
+    if (cleaned.length) {
+      chapters.push({
+        title: currentTitle,
+        paragraphs: cleaned
+      });
+    }
+
     paragraphs = [];
   }
 
-  for (const line of lines) {
-    if (chapterPattern.test(line)) {
-      if (paragraphs.length) saveChapter();
-      currentTitle = line.trim();
-    } else {
-      paragraphs.push(line);
+  let inContents = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+
+    if (!line) {
+      paragraphs.push("");
+      continue;
     }
+
+    // Reconoce un índice explícito y evita dividir
+    // cada entrada del índice en un capítulo.
+    if (/^(?:índice|indice|tabla de contenido|contenido|contents|table of contents)\s*:?\s*$/i.test(line)) {
+      inContents = true;
+      paragraphs.push(line);
+      continue;
+    }
+
+    const explicitMatch = line.match(numberedHeading);
+    const namedMatch = line.match(namedHeading);
+
+    const isNumberedHeading =
+      explicitMatch &&
+      line.length <= 140 &&
+      !isContentsLine.test(line);
+
+    const isNamedHeading =
+      namedMatch &&
+      line.length <= 100;
+
+    if (isNumberedHeading || isNamedHeading) {
+      if (inContents) {
+        // Si encontramos un encabezado real después del índice,
+        // empezamos la lectura estructurada desde ese punto.
+        const nextLines = lines.slice(i + 1, i + 4).join(" ");
+        const looksLikeRealSection =
+          !/\b(?:cap[ií]tulo|chapter|p[aá]gina|page)\b/i.test(nextLines) ||
+          /^(?:pr[oó]logo|prefacio|introducci[oó]n|cap[ií]tulo|chapter)\b/i.test(line);
+
+        if (!looksLikeRealSection) {
+          paragraphs.push(line);
+          continue;
+        }
+
+        inContents = false;
+      }
+
+      saveChapter();
+
+      if (isNamedHeading) {
+        currentTitle = line.replace(/[:.]$/, "").trim();
+      } else {
+        const label = explicitMatch[0].trim();
+        currentTitle = label;
+      }
+
+      continue;
+    }
+
+    paragraphs.push(line);
   }
+
   saveChapter();
 
-  if (!chapters.length) chapters.push({ title: "Capítulo 1", paragraphs: [normalized] });
-  if (chapters.length > 1000) throw new Error("El archivo contiene más de 1,000 capítulos.");
+  if (!chapters.length) {
+    const cleaned = cleanParagraphs(lines);
 
-  const total = chapters.reduce((sum, ch) =>
-    sum + ch.paragraphs.reduce((n, p) => n + p.length, 0), 0);
-  if (total > 1000000) throw new Error("El libro supera el límite de un millón de caracteres.");
+    if (!cleaned.length) {
+      throw new Error("No se pudo extraer texto legible del PDF.");
+    }
+
+    chapters.push({
+      title: "Texto inicial",
+      paragraphs: cleaned
+    });
+  }
+
+  if (chapters.length > 1000) {
+    throw new Error("El archivo contiene más de 1,000 secciones.");
+  }
+
+  const total = chapters.reduce(
+    (sum, chapter) =>
+      sum + chapter.paragraphs.reduce((n, paragraph) => n + paragraph.length, 0),
+    0
+  );
+
+  if (total > 1000000) {
+    throw new Error("El libro supera el límite de un millón de caracteres.");
+  }
+
   return { chapters };
 }
+
 
 async function extractImportedText(file) {
   const extension = file.name.split(".").pop().toLowerCase();
