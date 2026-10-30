@@ -603,6 +603,27 @@ button:disabled {
   color: var(--ink);
 }
 
+/* SELECTOR DE IDIOMA Y OTROS SELECT */
+
+.dialog-card select {
+  display: block;
+  width: 100%;
+  min-height: 46px;
+  padding: 11px 13px;
+  border: 1px solid #dedfd5;
+  border-radius: 9px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.dialog-card select:focus {
+  border-color: var(--green);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(40, 92, 71, .09);
+}
+
 .dialog-card input:focus {
   border-color: var(--green);
   outline: none;
