@@ -422,7 +422,6 @@ async function importPrivateBook(event) {
     button.textContent = "Importar a mi biblioteca";
   }
 }
-v
 
 function openImportDialog() {
   if (!state.user) {
