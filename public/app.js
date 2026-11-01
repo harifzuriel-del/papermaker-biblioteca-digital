@@ -13,7 +13,9 @@ const state = {
   progress: {},
   saveTimer: null,
   utterance: null,
-  isRestoringProgress: false
+  isRestoringProgress: false,
+  translatedChapter: null,
+  showingTranslation: false
 };
 
 const esc = (value) =>
@@ -121,499 +123,210 @@ async function loadPrivateBooks() {
     state.privateBooks = data.books || [];
     renderPrivateBooks();
   } catch (error) {
-    grid.innerHTML = `<div class="empty-state">No se pudieron cargar tus libros privados.
-      <br><br>${esc(error.message)}</div>`;
+    console.error("Error al cargar libros privados:", error);
+    grid.innerHTML = `<div class="empty-state">No se pudieron cargar tus libros privados.<br><small>${esc(error.message)}</small></div>`;
   }
 }
 
 function renderPrivateBooks() {
   const grid = $("#privateBookGrid");
   if (!grid) return;
-  if (!state.user) { grid.innerHTML = ""; return; }
 
-  if (!state.privateBooks.length) {
-    grid.innerHTML = `<div class="empty-state">Todavía no tienes libros privados.
-      <br><br>Importa tu primer archivo TXT o PDF para comenzar.</div>`;
-    return;
-  }
-
-  grid.innerHTML = state.privateBooks.map(book => `
-    <article class="book-card">
-      <div class="cover"><div class="cover-mark">
-        <span>PAPERMAKER · PRIVADO</span><b>${esc(book.title)}</b><small>${esc(book.author)}</small>
-      </div></div>
-      <div class="card-body">
-        <span class="category-pill">Mi biblioteca</span><h3>${esc(book.title)}</h3>
-        <p class="author">por ${esc(book.author)}</p>
-        <div class="card-footer">
-          <button class="read-button" data-private-read="${esc(book.id)}">Leer ahora →</button>
-          <button class="button button-outline" data-private-delete="${esc(book.id)}"
-            aria-label="Eliminar ${esc(book.title)}">Eliminar</button>
+  grid.innerHTML = state.privateBooks.length
+    ? state.privateBooks.map(book => `
+      <article class="book-card">
+        ${cover({
+          ...book,
+          category: "Mi biblioteca privada"
+        })}
+        <div class="card-body">
+          <span class="category-pill">Mi biblioteca privada</span>
+          <h3>${esc(book.title)}</h3>
+          <p class="author">por ${esc(book.author || "Autor desconocido")}</p>
+          <div class="card-footer">
+            <button class="read-button" data-private-read="${esc(book.id)}">Leer ahora →</button>
+            <button class="delete-button" data-private-delete="${esc(book.id)}">Eliminar</button>
+          </div>
         </div>
-      </div>
-    </article>`).join("");
-}
-
-
-function splitTextIntoChapters(text) {
-  const normalized = String(text || "")
-    .replace(/\r\n?/g, "\n")
-    .replace(/\u0000/g, "")
-    .replace(/\u00a0/g, " ")
-    .trim();
-
-  if (!normalized) {
-    throw new Error("El archivo no contiene texto legible.");
-  }
-
-  const lines = normalized.split("\n");
-  const chapters = [];
-
-  let currentTitle = "Texto inicial";
-  let paragraphs = [];
-
-  // Encabezados explícitos de capítulos y secciones.
-  const numberedHeading =
-    /^\s*(?:(?:cap[ií]tulo|chapter)\s+(?:n[úu]mero\s+)?[\divxlcdm]+|(?:parte|part|secci[oó]n|section|libro|book)\s+(?:[\divxlcdm]+|[a-z]))(?:\s*[:.\-–—]\s*|\s+)?(.*)$/i;
-
-  // Secciones comunes de un libro.
-  const namedHeading =
-    /^\s*(pr[oó]logo|prefacio|introducci[oó]n|ep[ií]logo|conclusi[oó]n|agradecimientos|bibliograf[ií]a|ap[eé]ndice|dedicatoria|foreword|preface|introduction|epilogue|afterword|acknowledgments|acknowledgements|bibliography|appendix|dedication)\s*[:.]?\s*$/i;
-
-  // Evita confundir entradas del índice con capítulos reales.
-  const isContentsLine =
-    /^\s*(?:[ivxlcdm]+|\d+)?\s*(?:[.)-]\s*)?(?:cap[ií]tulo|chapter|parte|part|secci[oó]n|section)\b.*(?:\.{2,}|…{1,}|\s{2,}\d+\s*$)/i;
-
-  function cleanParagraphs(sourceLines) {
-    const result = [];
-    let buffer = [];
-
-    function flush() {
-      const paragraph = buffer
-        .join(" ")
-        .replace(/\s+/g, " ")
-        .trim();
-
-      if (paragraph) result.push(paragraph);
-      buffer = [];
-    }
-
-    for (const rawLine of sourceLines) {
-      const line = rawLine.replace(/\s+/g, " ").trim();
-
-      if (!line) {
-        flush();
-        continue;
-      }
-
-      // Conserva los saltos entre párrafos sin dividir
-      // una frase por cada línea extraída del PDF.
-      buffer.push(line);
-    }
-
-    flush();
-    return result;
-  }
-
-  function saveChapter() {
-    const cleaned = cleanParagraphs(paragraphs);
-
-    if (cleaned.length) {
-      chapters.push({
-        title: currentTitle,
-        paragraphs: cleaned
-      });
-    }
-
-    paragraphs = [];
-  }
-
-  let inContents = false;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-
-    if (!line) {
-      paragraphs.push("");
-      continue;
-    }
-
-    // Reconoce un índice explícito y evita dividir
-    // cada entrada del índice en un capítulo.
-    if (/^(?:índice|indice|tabla de contenido|contenido|contents|table of contents)\s*:?\s*$/i.test(line)) {
-      inContents = true;
-      paragraphs.push(line);
-      continue;
-    }
-
-    const explicitMatch = line.match(numberedHeading);
-    const namedMatch = line.match(namedHeading);
-
-    const isNumberedHeading =
-      explicitMatch &&
-      line.length <= 140 &&
-      !isContentsLine.test(line);
-
-    const isNamedHeading =
-      namedMatch &&
-      line.length <= 100;
-
-    if (isNumberedHeading || isNamedHeading) {
-      if (inContents) {
-        // Si encontramos un encabezado real después del índice,
-        // empezamos la lectura estructurada desde ese punto.
-        const nextLines = lines.slice(i + 1, i + 4).join(" ");
-        const looksLikeRealSection =
-          !/\b(?:cap[ií]tulo|chapter|p[aá]gina|page)\b/i.test(nextLines) ||
-          /^(?:pr[oó]logo|prefacio|introducci[oó]n|cap[ií]tulo|chapter)\b/i.test(line);
-
-        if (!looksLikeRealSection) {
-          paragraphs.push(line);
-          continue;
-        }
-
-        inContents = false;
-      }
-
-      saveChapter();
-
-      if (isNamedHeading) {
-        currentTitle = line.replace(/[:.]$/, "").trim();
-      } else {
-        const label = explicitMatch[0].trim();
-        currentTitle = label;
-      }
-
-      continue;
-    }
-
-    paragraphs.push(line);
-  }
-
-  saveChapter();
-
-  if (!chapters.length) {
-    const cleaned = cleanParagraphs(lines);
-
-    if (!cleaned.length) {
-      throw new Error("No se pudo extraer texto legible del PDF.");
-    }
-
-    chapters.push({
-      title: "Texto inicial",
-      paragraphs: cleaned
-    });
-  }
-
-  if (chapters.length > 1000) {
-    throw new Error("El archivo contiene más de 1,000 secciones.");
-  }
-
-  const total = chapters.reduce(
-    (sum, chapter) =>
-      sum + chapter.paragraphs.reduce((n, paragraph) => n + paragraph.length, 0),
-    0
-  );
-
-  if (total > 1000000) {
-    throw new Error("El libro supera el límite de un millón de caracteres.");
-  }
-
-  return { chapters };
-}
-
-
-async function extractImportedText(file) {
-  const extension = file.name.split(".").pop().toLowerCase();
-  if (extension === "txt") return await file.text();
-  if (extension !== "pdf") throw new Error("Selecciona un archivo TXT o PDF.");
-  if (!window.pdfjsLib) throw new Error("No se pudo cargar PDF.js. Recarga la página e inténtalo de nuevo.");
-
-  window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-
-  const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
-  const pages = [];
-
-  for (let n = 1; n <= pdf.numPages; n++) {
-    const page = await pdf.getPage(n);
-    const content = await page.getTextContent();
-    const items = content.items.filter(x => typeof x.str === "string")
-      .map(x => ({ text: x.str, y: x.transform ? x.transform[5] : 0 }));
-
-    let pageText = "";
-    let previousY = null;
-    for (const item of items) {
-      if (previousY !== null && Math.abs(item.y - previousY) > 4) pageText += "\n";
-      else if (pageText && !pageText.endsWith("\n")) pageText += " ";
-      pageText += item.text;
-      previousY = item.y;
-    }
-    pages.push(pageText);
-  }
-
-  const text = pages.join("\n\n");
-  if (!text.trim()) throw new Error("Este PDF no contiene texto extraíble. Si es un escaneo, necesitará OCR.");
-  return text;
-}
-
-
-async function importPrivateBook(event) {
-  event.preventDefault();
-
-  const errorEl = $("#importBookError");
-  const button = $("#savePrivateBookButton");
-  errorEl.textContent = "";
-
-  if (!state.user) {
-    $("#importBookDialog").close();
-    openAuth("login");
-    return;
-  }
-
-  const title = $("#privateBookTitle").value.trim();
-  const author = $("#privateBookAuthor").value.trim();
-  const language = $("#privateBookLanguage").value;
-  const file = $("#privateBookFile").files[0];
-
-  if (!title || !author || !file) {
-    errorEl.textContent =
-      "Completa el título, el autor y selecciona un archivo.";
-    return;
-  }
-
-  if (!["es", "en"].includes(language)) {
-    errorEl.textContent = "Selecciona un idioma válido.";
-    return;
-  }
-
-  button.disabled = true;
-  button.textContent = "Procesando archivo…";
-
-  try {
-    const content = splitTextIntoChapters(
-      await extractImportedText(file)
-    );
-
-    button.textContent = "Guardando libro…";
-
-    const result = await api("/api/private-books", {
-      method: "POST",
-      body: JSON.stringify({
-        title,
-        author,
-        language,
-        content
-      })
-    });
-
-    state.privateBooks.unshift(result.book);
-    renderPrivateBooks();
-
-    $("#importBookForm").reset();
-    $("#importBookDialog").close();
-
-    toast("Libro importado correctamente.");
-  } catch (error) {
-    console.error("Error al importar el libro:", error);
-    errorEl.textContent = error.message;
-  } finally {
-    button.disabled = false;
-    button.textContent = "Importar a mi biblioteca";
-  }
-}
-
-function openImportDialog() {
-  if (!state.user) {
-    openAuth("login");
-    toast("Inicia sesión para importar libros privados.");
-    return;
-  }
-  $("#importBookError").textContent = "";
-  $("#importBookDialog").showModal();
+      </article>
+    `).join("")
+    : '<div class="empty-state">Todavía no tienes libros privados.</div>';
 }
 
 async function deletePrivateBook(id) {
-  const book = state.privateBooks.find(b => String(b.id) === String(id));
-  if (!book || !confirm(`¿Eliminar "${book.title}" de tus libros privados?`)) return;
+  if (!confirm("¿Seguro que deseas eliminar este libro de tu biblioteca privada?")) return;
 
   try {
-    await api(`/api/private-books/${encodeURIComponent(id)}`, { method: "DELETE" });
-    state.privateBooks = state.privateBooks.filter(b => String(b.id) !== String(id));
+    await api(`/api/private-books/${encodeURIComponent(id)}`, {
+      method: "DELETE"
+    });
 
-    if (state.currentBook?.isPrivate && String(state.currentBook.id) === String(id)) {
-      clearTimeout(state.saveTimer);
-      stopSpeech();
-      if ($("#readerDialog").open) $("#readerDialog").close();
-      state.currentBook = null;
-      state.content = null;
-    }
-
+    state.privateBooks = state.privateBooks.filter(book => String(book.id) !== String(id));
     renderPrivateBooks();
-    toast("Libro privado eliminado.");
+    toast("Libro eliminado.");
   } catch (error) {
-    toast(error.message);
+    console.error("Error al eliminar el libro:", error);
+    toast(error.message || "No se pudo eliminar el libro.");
   }
 }
 
 /* AUTENTICACIÓN */
 function setAuthMode(mode) {
   state.authMode = mode;
-  const register = mode === "register";
-  $("#authTitle").textContent = register ? "Crea tu cuenta" : "Inicia sesión";
-  $("#authIntro").textContent = register
-    ? "Guarda tu progreso y continúa leyendo en otros dispositivos."
-    : "Continúa donde te quedaste.";
-  $("#nameField").classList.toggle("hidden", !register);
-  $("#nameField input").required = register;
-  $("#authForm [name=password]").autocomplete = register ? "new-password" : "current-password";
-  $("#authSubmit").textContent = register ? "Crear cuenta gratis" : "Iniciar sesión";
-  $("#switchLabel").textContent = register ? "¿Ya tienes cuenta?" : "¿Aún no tienes cuenta?";
-  $("#switchAuth").textContent = register ? "Iniciar sesión" : "Crear cuenta";
-  $("#authError").textContent = "";
-}
 
-function openAuth(mode = "login") {
-  setAuthMode(mode);
-  if (!$("#authDialog").open) $("#authDialog").showModal();
-}
+  const title = $("#authTitle");
+  const submit = $("#authSubmit");
+  const nameField = $("#nameField");
+  const switchText = $("#authSwitchText");
+  const switchButton = $("#authSwitch");
 
-function renderAccount() {
-  $("#accountButton").textContent = state.user
-    ? `Hola, ${state.user.name.split(/\s+/)[0]}`
-    : "Iniciar sesión";
-  $("#heroAccount").textContent = state.user ? "Mi cuenta" : "Crear cuenta gratis";
-
-  if (state.user) {
-    $("#syncStatus").textContent =
-      `Sesión iniciada como ${state.user.name}. Tu progreso se sincroniza cuando hay conexión.`;
-  }
+  if (title) title.textContent = mode === "register" ? "Crear cuenta" : "Iniciar sesión";
+  if (submit) submit.textContent = mode === "register" ? "Crear cuenta" : "Entrar";
+  if (nameField) nameField.classList.toggle("hidden", mode !== "register");
+  if (switchText) switchText.textContent = mode === "register"
+    ? "¿Ya tienes una cuenta?"
+    : "¿Todavía no tienes cuenta?";
+  if (switchButton) switchButton.textContent = mode === "register"
+    ? "Inicia sesión"
+    : "Regístrate";
 }
 
 async function refreshUser() {
   try {
     const data = await api("/api/auth/me");
-    state.user = data.user;
-    if (state.user) {
-      const p = await api("/api/progress");
-      state.progress = Object.fromEntries((p.progress || []).map(x => [String(x.bookId), x]));
-    }
+    state.user = data.user || null;
   } catch {
     state.user = null;
-    state.progress = {};
   }
 
-  renderAccount();
+  renderAuth();
   await loadPrivateBooks();
+}
+
+function renderAuth() {
+  const loggedOut = $("#loggedOut");
+  const loggedIn = $("#loggedIn");
+  const userEmail = $("#userEmail");
+
+  if (loggedOut) loggedOut.classList.toggle("hidden", !!state.user);
+  if (loggedIn) loggedIn.classList.toggle("hidden", !state.user);
+  if (userEmail && state.user) userEmail.textContent = state.user.email;
 }
 
 async function submitAuth(event) {
   event.preventDefault();
-  $("#authError").textContent = "";
 
-  const body = Object.fromEntries(new FormData($("#authForm")).entries());
-  const mode = state.authMode;
-  const path = mode === "register" ? "/api/auth/register" : "/api/auth/login";
-
-  $("#authSubmit").disabled = true;
-  $("#authSubmit").textContent = "Un momento…";
+  const email = $("#emailInput")?.value.trim();
+  const password = $("#passwordInput")?.value;
+  const name = $("#nameInput")?.value.trim();
 
   try {
-    const data = await api(path, { method: "POST", body: JSON.stringify(body) });
-    state.user = data.user;
+    const endpoint = state.authMode === "register"
+      ? "/api/auth/register"
+      : "/api/auth/login";
 
-    try {
-      const p = await api("/api/progress");
-      state.progress = Object.fromEntries((p.progress || []).map(x => [String(x.bookId), x]));
-    } catch (e) {
-      console.error("Error al cargar el progreso:", e);
-      toast("Sesión iniciada, pero no se pudo cargar el progreso público.");
-    }
+    const body = state.authMode === "register"
+      ? { email, password, name }
+      : { email, password };
 
-    $("#authDialog").close();
-    $("#authForm").reset();
-    renderAccount();
-    await loadPrivateBooks();
-    toast(mode === "register" ? "¡Cuenta creada! Ya puedes leer." : "Sesión iniciada.");
+    await api(endpoint, {
+      method: "POST",
+      body: JSON.stringify(body)
+    });
 
-    if (state.currentBook) {
-      if (state.currentBook.isPrivate) await syncPrivateProgressFromServer(state.currentBook.id);
-      else await syncProgressFromServer(state.currentBook.id);
-    }
-  } catch (e) {
-    console.error("Error de autenticación:", e);
-    $("#authError").textContent = e.message;
-  } finally {
-    $("#authSubmit").disabled = false;
-    $("#authSubmit").textContent = mode === "register" ? "Crear cuenta gratis" : "Iniciar sesión";
+    toast(state.authMode === "register"
+      ? "Cuenta creada correctamente."
+      : "Sesión iniciada.");
+
+    if ($("#authForm")) $("#authForm").reset();
+    await refreshUser();
+  } catch (error) {
+    console.error("Error de autenticación:", error);
+    toast(error.message || "No se pudo completar la operación.");
   }
 }
 
 async function logout() {
-  try { await api("/api/auth/logout", { method: "POST" }); } catch {}
-
-  clearTimeout(state.saveTimer);
-  state.user = null;
-  state.progress = {};
-  state.privateProgress = {};
-  state.privateBooks = [];
-
-  if (state.currentBook?.isPrivate) {
-    stopSpeech();
-    if ($("#readerDialog").open) $("#readerDialog").close();
-    state.currentBook = null;
-    state.content = null;
+  try {
+    await api("/api/auth/logout", { method: "POST" });
+    state.user = null;
+    state.privateBooks = [];
+    state.privateProgress = {};
+    renderAuth();
+    await loadPrivateBooks();
+    toast("Sesión cerrada.");
+  } catch (error) {
+    console.error("Error al cerrar sesión:", error);
+    toast(error.message || "No se pudo cerrar la sesión.");
   }
-
-  renderAccount();
-  await loadPrivateBooks();
-  toast("Has cerrado sesión.");
 }
 
-/* PROGRESO DE LECTURA */
+/* LECTURA Y PROGRESO */
 function getReaderScrollContainer() {
-  return $("#readerDialog");
+  return $("#readerText")?.parentElement || $("#readerDialog");
 }
 
 function getReadingPosition() {
   const container = getReaderScrollContainer();
-  return container ? Math.max(0, Math.round(container.scrollTop)) : 0;
+  return container ? container.scrollTop : 0;
 }
 
 function restoreReadingPosition(position) {
   const container = getReaderScrollContainer();
-  if (container) container.scrollTop = Math.max(0, Number(position) || 0);
+  if (container) container.scrollTop = Number(position) || 0;
 }
 
 function queueProgressSave() {
-  if (!state.user || !state.currentBook || state.isRestoringProgress) return;
+  if (state.isRestoringProgress || !state.currentBook) return;
+
   clearTimeout(state.saveTimer);
+  state.saveTimer = setTimeout(() => {
+    saveProgress();
+  }, 800);
+}
 
-  state.saveTimer = setTimeout(async () => {
-    const book = state.currentBook;
-    if (!book || !state.user) return;
+async function saveProgress() {
+  if (!state.currentBook) return;
 
-    const payload = { chapter: state.chapter, position: getReadingPosition() };
-    const isPrivate = book.isPrivate === true;
-    const endpoint = isPrivate
-      ? `/api/private-progress/${encodeURIComponent(book.id)}`
-      : `/api/progress/${encodeURIComponent(book.id)}`;
+  const bookId = String(state.currentBook.id);
+  const progressData = {
+    chapter: state.chapter,
+    position: getReadingPosition()
+  };
 
-    try {
-      await api(endpoint, { method: "PUT", body: JSON.stringify(payload) });
-      const entry = { bookId: book.id, ...payload, updatedAt: new Date().toISOString() };
-      if (isPrivate) state.privateProgress[String(book.id)] = entry;
-      else state.progress[String(book.id)] = entry;
-      $("#syncStatus").textContent = "Progreso guardado en tu cuenta.";
-    } catch (error) {
-      console.error("Error al guardar el progreso:", error);
-      $("#syncStatus").textContent = "No se pudo sincronizar. Comprueba tu conexión.";
-    }
-  }, 700);
+  if (state.currentBook.isPrivate) {
+    state.privateProgress[bookId] = progressData;
+  } else {
+    state.progress[bookId] = progressData;
+  }
+
+  if (!state.user) return;
+
+  try {
+    const endpoint = state.currentBook.isPrivate
+      ? "/api/private-progress"
+      : "/api/progress";
+
+    await api(endpoint, {
+      method: "POST",
+      body: JSON.stringify({
+        bookId,
+        ...progressData
+      })
+    });
+
+    const status = $("#syncStatus");
+    if (status) status.textContent = "Progreso sincronizado.";
+  } catch (error) {
+    console.error("Error al guardar el progreso:", error);
+    const status = $("#syncStatus");
+    if (status) status.textContent = "No se pudo guardar el progreso.";
+  }
 }
 
 async function syncPrivateProgressFromServer(bookId) {
   if (!state.user) return;
+
   state.isRestoringProgress = true;
   clearTimeout(state.saveTimer);
 
@@ -622,21 +335,38 @@ async function syncPrivateProgressFromServer(bookId) {
     state.privateProgress = Object.fromEntries(
       (data.progress || []).map(item => [String(item.bookId), item])
     );
+
     const saved = state.privateProgress[String(bookId)];
 
-    if (saved && String(state.currentBook?.id) === String(bookId) &&
-        state.currentBook?.isPrivate && state.content?.chapters?.length) {
-      state.chapter = Math.max(0, Math.min(Number(saved.chapter) || 0, state.content.chapters.length - 1));
+    if (
+      saved &&
+      String(state.currentBook?.id) === String(bookId) &&
+      state.currentBook?.isPrivate &&
+      state.content?.chapters?.length
+    ) {
+      state.chapter = Math.max(
+        0,
+        Math.min(Number(saved.chapter) || 0, state.content.chapters.length - 1)
+      );
+
       renderChapter();
       restoreReadingPosition(saved.position);
     }
-    $("#syncStatus").textContent = "Progreso del libro privado sincronizado.";
+
+    const status = $("#syncStatus");
+    if (status) status.textContent = "Progreso del libro privado sincronizado.";
   } catch (error) {
     console.error("Error al sincronizar el progreso privado:", error);
-    $("#syncStatus").textContent = "No se pudo sincronizar el progreso privado.";
+    const status = $("#syncStatus");
+    if (status) status.textContent = "No se pudo sincronizar el progreso privado.";
   } finally {
     state.isRestoringProgress = false;
-    if (state.currentBook?.isPrivate && String(state.currentBook.id) === String(bookId) && state.user) {
+
+    if (
+      state.currentBook?.isPrivate &&
+      String(state.currentBook.id) === String(bookId) &&
+      state.user
+    ) {
       queueProgressSave();
     }
   }
@@ -644,26 +374,47 @@ async function syncPrivateProgressFromServer(bookId) {
 
 async function syncProgressFromServer(bookId) {
   if (!state.user) return;
+
   state.isRestoringProgress = true;
   clearTimeout(state.saveTimer);
 
   try {
     const data = await api("/api/progress");
-    state.progress = Object.fromEntries((data.progress || []).map(x => [String(x.bookId), x]));
+    state.progress = Object.fromEntries(
+      (data.progress || []).map(item => [String(item.bookId), item])
+    );
+
     const saved = state.progress[String(bookId)];
-        if (saved && String(state.currentBook?.id) === String(bookId) &&
-        !state.currentBook?.isPrivate && state.content?.chapters?.length) {
-      state.chapter = Math.max(0, Math.min(Number(saved.chapter) || 0, state.content.chapters.length - 1));
+
+    if (
+      saved &&
+      String(state.currentBook?.id) === String(bookId) &&
+      !state.currentBook?.isPrivate &&
+      state.content?.chapters?.length
+    ) {
+      state.chapter = Math.max(
+        0,
+        Math.min(Number(saved.chapter) || 0, state.content.chapters.length - 1)
+      );
+
       renderChapter();
       restoreReadingPosition(saved.position);
     }
-    $("#syncStatus").textContent = "Progreso sincronizado con tu cuenta.";
-  } catch (e) {
-    console.error("Error al sincronizar el progreso:", e);
-    $("#syncStatus").textContent = "No se pudo sincronizar tu progreso.";
+
+    const status = $("#syncStatus");
+    if (status) status.textContent = "Progreso sincronizado con tu cuenta.";
+  } catch (error) {
+    console.error("Error al sincronizar el progreso:", error);
+    const status = $("#syncStatus");
+    if (status) status.textContent = "No se pudo sincronizar tu progreso.";
   } finally {
     state.isRestoringProgress = false;
-    if (!state.currentBook?.isPrivate && String(state.currentBook?.id) === String(bookId) && state.user) {
+
+    if (
+      !state.currentBook?.isPrivate &&
+      String(state.currentBook?.id) === String(bookId) &&
+      state.user
+    ) {
       queueProgressSave();
     }
   }
@@ -673,12 +424,15 @@ async function syncProgressFromServer(bookId) {
 async function openBook(id) {
   try {
     const data = await api(`/api/books/${encodeURIComponent(id)}`);
+
     clearTimeout(state.saveTimer);
     stopSpeech();
 
     state.currentBook = { ...data.book, isPrivate: false };
     state.content = data.content;
     state.chapter = 0;
+    state.translatedChapter = null;
+    state.showingTranslation = false;
 
     $("#readerBookTitle").textContent = data.book.title;
     $("#readerAuthor").textContent = `por ${data.book.author}`;
@@ -687,19 +441,24 @@ async function openBook(id) {
 
     $("#readerDialog").showModal();
     document.body.classList.add("reader-open");
+
     renderChapter();
 
-    if (state.user) await syncProgressFromServer(id);
-    else $("#syncStatus").textContent = "Inicia sesión para sincronizar tu progreso entre dispositivos.";
-  } catch (e) {
-    console.error("Error al abrir el libro:", e);
-    toast(e.message);
+    if (state.user) {
+      await syncProgressFromServer(id);
+    } else {
+      $("#syncStatus").textContent = "Inicia sesión para sincronizar tu progreso entre dispositivos.";
+    }
+  } catch (error) {
+    console.error("Error al abrir el libro:", error);
+    toast(error.message);
   }
 }
 
 async function openPrivateBook(id) {
   try {
     const data = await api(`/api/private-books/${encodeURIComponent(id)}`);
+
     clearTimeout(state.saveTimer);
     stopSpeech();
 
@@ -709,8 +468,11 @@ async function openPrivateBook(id) {
       rights_note: "Libro privado de tu cuenta.",
       isPrivate: true
     };
+
     state.content = data.content;
     state.chapter = 0;
+    state.translatedChapter = null;
+    state.showingTranslation = false;
 
     $("#readerBookTitle").textContent = data.book.title;
     $("#readerAuthor").textContent = `por ${data.book.author}`;
@@ -719,50 +481,192 @@ async function openPrivateBook(id) {
 
     $("#readerDialog").showModal();
     document.body.classList.add("reader-open");
+
     renderChapter();
 
-    if (state.user) await syncPrivateProgressFromServer(id);
-    else $("#syncStatus").textContent = "Inicia sesión para guardar tu progreso.";
+    if (state.user) {
+      await syncPrivateProgressFromServer(id);
+    } else {
+      $("#syncStatus").textContent = "Inicia sesión para guardar tu progreso.";
+    }
   } catch (error) {
     console.error("Error al abrir el libro privado:", error);
     toast(error.message);
   }
 }
 
+/* TRADUCCIÓN DE CAPÍTULOS */
+function canTranslateCurrentBook() {
+  return (
+    state.currentBook?.isPrivate === true &&
+    state.currentBook?.language === "en"
+  );
+}
+
+async function translateCurrentChapter() {
+  const button = $("#translateButton");
+
+  if (!canTranslateCurrentBook()) {
+    toast("La traducción está disponible para libros privados en inglés.");
+    return;
+  }
+
+  // Si ya tenemos la traducción de este capítulo, alternamos
+  // entre el original y la traducción sin llamar otra vez al servidor.
+  if (
+    state.translatedChapter?.chapter === state.chapter &&
+    state.translatedChapter?.bookId === String(state.currentBook.id)
+  ) {
+    toggleChapterTranslation();
+    return;
+  }
+
+  const chapterToTranslate = state.chapter;
+  const bookId = String(state.currentBook.id);
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Traduciendo…";
+  }
+
+  try {
+    stopSpeech();
+
+    const result = await api(
+      `/api/private-books/${encodeURIComponent(bookId)}/translate`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          chapter: chapterToTranslate
+        })
+      }
+    );
+
+    // No aplicar la respuesta si el usuario cambió de libro o capítulo.
+    if (
+      String(state.currentBook?.id) !== bookId ||
+      state.chapter !== chapterToTranslate
+    ) {
+      return;
+    }
+
+    if (!result?.ok || !Array.isArray(result.paragraphs)) {
+      throw new Error("El servidor no devolvió una traducción válida.");
+    }
+
+    state.translatedChapter = {
+      bookId,
+      chapter: chapterToTranslate,
+      title: result.title || state.content.chapters[chapterToTranslate].title,
+      paragraphs: result.paragraphs
+    };
+
+    state.showingTranslation = true;
+
+    renderChapter();
+    toast("Capítulo traducido al español.");
+  } catch (error) {
+    console.error("Error al traducir el capítulo:", error);
+    toast(error.message || "No se pudo traducir el capítulo.");
+  } finally {
+    if (button) button.disabled = false;
+    updateTranslationButton();
+  }
+}
+
+function updateTranslationButton() {
+  const button = $("#translateButton");
+  if (!button) return;
+
+  const available = canTranslateCurrentBook();
+
+  button.hidden = !available;
+
+  if (!available) return;
+
+  button.textContent = state.showingTranslation
+    ? "Ver original"
+    : "🌐 Traducir capítulo";
+}
+
+function toggleChapterTranslation() {
+  if (
+    !state.translatedChapter ||
+    state.translatedChapter.chapter !== state.chapter ||
+    state.translatedChapter.bookId !== String(state.currentBook?.id)
+  ) {
+    return;
+  }
+
+  stopSpeech();
+  state.showingTranslation = !state.showingTranslation;
+  renderChapter();
+}
+
 function renderChapter() {
   if (!state.content?.chapters?.length) return;
 
   const chapters = state.content.chapters;
-  state.chapter = Math.max(0, Math.min(state.chapter, chapters.length - 1));
-  const chapter = chapters[state.chapter];
 
-  $("#chapterTitle").textContent = chapter.title;
-  $("#readerText").innerHTML = (chapter.paragraphs || []).map(p => `<p>${esc(p)}</p>`).join("");
+  state.chapter = Math.max(
+    0,
+    Math.min(state.chapter, chapters.length - 1)
+  );
+
+  const originalChapter = chapters[state.chapter];
+
+  const translationIsCurrent =
+    state.showingTranslation &&
+    state.translatedChapter?.chapter === state.chapter &&
+    state.translatedChapter?.bookId === String(state.currentBook?.id);
+
+  const chapter = translationIsCurrent
+    ? state.translatedChapter
+    : originalChapter;
+
+  $("#chapterTitle").textContent =
+    chapter.title || originalChapter.title;
+
+  $("#readerText").innerHTML = (chapter.paragraphs || [])
+    .map(paragraph => `<p>${esc(paragraph)}</p>`)
+    .join("");
+
   $("#readerText").style.fontSize = `${state.fontSize}px`;
 
-  $("#chapterList").innerHTML = chapters.map((c, i) => `
-    <button class="chapter-item ${i === state.chapter ? "active" : ""}" data-chapter="${i}">
-      ${i + 1}. ${esc(c.title)}
+  $("#chapterList").innerHTML = chapters.map((item, index) => `
+    <button class="chapter-item ${index === state.chapter ? "active" : ""}" data-chapter="${index}">
+      ${index + 1}. ${esc(item.title)}
     </button>`).join("");
 
   $("#prevChapter").disabled = state.chapter === 0;
-  $("#nextChapter").disabled = state.chapter >= chapters.length - 1;
-  $("#nextChapter").textContent = state.chapter >= chapters.length - 1
-    ? "Fin del libro" : "Siguiente capítulo →";
+
+  $("#nextChapter").disabled =
+    state.chapter >= chapters.length - 1;
+
+  $("#nextChapter").textContent =
+    state.chapter >= chapters.length - 1
+      ? "Fin del libro"
+      : "Siguiente capítulo →";
+
+  updateTranslationButton();
 
   const container = getReaderScrollContainer();
   if (container) container.scrollTop = 0;
+
   queueProgressSave();
 }
 
 /* VOZ */
 function stopSpeech() {
-  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  if ("speechSynthesis" in window) {
+    window.speechSynthesis.cancel();
+  }
+
   state.utterance = null;
+
   const button = $("#listenButton");
   if (button) button.textContent = "▶ Escuchar capítulo";
 }
-
 
 function toggleSpeech() {
   if (!("speechSynthesis" in window)) {
@@ -775,22 +679,32 @@ function toggleSpeech() {
     return;
   }
 
-  const chapter = state.content?.chapters?.[state.chapter];
-  if (!chapter) return;
+  const originalChapter = state.content?.chapters?.[state.chapter];
+  if (!originalChapter) return;
+
+  const translationIsCurrent =
+    state.showingTranslation &&
+    state.translatedChapter?.chapter === state.chapter &&
+    state.translatedChapter?.bookId === String(state.currentBook?.id);
+
+  const chapter = translationIsCurrent
+    ? state.translatedChapter
+    : originalChapter;
 
   const utterance = new SpeechSynthesisUtterance(
-    `${chapter.title}. ${(chapter.paragraphs || []).join(". ")}`
+    `${chapter.title || originalChapter.title}. ${(chapter.paragraphs || []).join(". ")}`
   );
 
-  // Seleccionar el idioma original del libro.
-  const language =
-    state.currentBook?.language === "en" ? "en-US" : "es-MX";
+  // La voz coincide con el idioma del texto que está viendo el lector.
+  const language = translationIsCurrent
+    ? "es-MX"
+    : (state.currentBook?.language === "en" ? "en-US" : "es-MX");
 
   utterance.lang = language;
   utterance.rate = 0.92;
 
-  // Elegir una voz compatible con el idioma, si está disponible.
   const voices = window.speechSynthesis.getVoices();
+
   const matchingVoice = voices.find(
     voice => voice.lang.toLowerCase() === language.toLowerCase()
   );
@@ -801,23 +715,29 @@ function toggleSpeech() {
 
   utterance.onend = () => {
     state.utterance = null;
-    $("#listenButton").textContent = "▶ Escuchar capítulo";
+
+    const button = $("#listenButton");
+    if (button) button.textContent = "▶ Escuchar capítulo";
   };
 
   utterance.onerror = () => {
     state.utterance = null;
-    $("#listenButton").textContent = "▶ Escuchar capítulo";
+
+    const button = $("#listenButton");
+    if (button) button.textContent = "▶ Escuchar capítulo";
+
     toast("No se pudo reproducir la voz en este dispositivo.");
   };
 
   state.utterance = utterance;
+
   window.speechSynthesis.speak(utterance);
-  $("#listenButton").textContent = "Ⅱ Detener narración";
+
+  const button = $("#listenButton");
+  if (button) button.textContent = "Ⅱ Detener narración";
 }
 
-
 /* EVENTOS SEGUROS */
-
 function bindEvent(selector, eventName, handler, options) {
   const element = $(selector);
 
@@ -835,39 +755,6 @@ bindEvent("#bookGrid", "click", event => {
   if (button) openBook(button.dataset.read);
 });
 
-// Cuenta y autenticación
-bindEvent("#accountButton", "click", () => {
-  if (state.user) {
-    if (confirm("¿Quieres cerrar tu sesión?")) logout();
-  } else {
-    openAuth("login");
-  }
-});
-
-bindEvent("#heroAccount", "click", () => {
-  if (state.user) {
-    toast("Tu progreso está asociado a tu cuenta.");
-  } else {
-    openAuth("register");
-  }
-});
-
-bindEvent("#switchAuth", "click", () => {
-  setAuthMode(state.authMode === "login" ? "register" : "login");
-});
-
-bindEvent("#authForm", "submit", submitAuth);
-
-// Importación de libros privados
-bindEvent("#importBookButton", "click", openImportDialog);
-bindEvent("#importBookForm", "submit", importPrivateBook);
-
-bindEvent("#closeImportBookDialog", "click", () => {
-  const dialog = $("#importBookDialog");
-  if (dialog) dialog.close();
-});
-
-// Acciones de la biblioteca privada
 bindEvent("#privateBookGrid", "click", event => {
   const readButton = event.target.closest("[data-private-read]");
   const deleteButton = event.target.closest("[data-private-delete]");
@@ -880,6 +767,15 @@ bindEvent("#privateBookGrid", "click", event => {
     deletePrivateBook(deleteButton.dataset.privateDelete);
   }
 });
+
+// Autenticación
+bindEvent("#authForm", "submit", submitAuth);
+
+bindEvent("#authSwitch", "click", () => {
+  setAuthMode(state.authMode === "login" ? "register" : "login");
+});
+
+bindEvent("#logoutButton", "click", logout);
 
 // Lector
 bindEvent("#closeReader", "click", () => {
@@ -908,7 +804,11 @@ bindEvent("#chapterList", "click", event => {
 
   if (button) {
     stopSpeech();
+
     state.chapter = Number(button.dataset.chapter);
+    state.translatedChapter = null;
+    state.showingTranslation = false;
+
     renderChapter();
   }
 });
@@ -916,7 +816,11 @@ bindEvent("#chapterList", "click", event => {
 bindEvent("#prevChapter", "click", () => {
   if (state.chapter > 0) {
     stopSpeech();
+
     state.chapter--;
+    state.translatedChapter = null;
+    state.showingTranslation = false;
+
     renderChapter();
   }
 });
@@ -927,7 +831,11 @@ bindEvent("#nextChapter", "click", () => {
     state.chapter < state.content.chapters.length - 1
   ) {
     stopSpeech();
+
     state.chapter++;
+    state.translatedChapter = null;
+    state.showingTranslation = false;
+
     renderChapter();
   }
 });
@@ -937,6 +845,7 @@ bindEvent("#fontDown", "click", () => {
   state.fontSize = Math.max(15, state.fontSize - 1);
 
   const readerText = $("#readerText");
+
   if (readerText) {
     readerText.style.fontSize = `${state.fontSize}px`;
   }
@@ -946,6 +855,7 @@ bindEvent("#fontUp", "click", () => {
   state.fontSize = Math.min(28, state.fontSize + 1);
 
   const readerText = $("#readerText");
+
   if (readerText) {
     readerText.style.fontSize = `${state.fontSize}px`;
   }
@@ -958,6 +868,7 @@ bindEvent("#themeToggle", "click", () => {
 });
 
 bindEvent("#listenButton", "click", toggleSpeech);
+bindEvent("#translateButton", "click", translateCurrentChapter);
 
 // Año del pie de página
 const yearElement = $("#year");
