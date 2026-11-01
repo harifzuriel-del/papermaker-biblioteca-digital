@@ -1,9 +1,9 @@
-```javascript
+
 import {
   json,
   currentUser,
   sameOrigin
-} from "./_lib.js";
+} from "../_lib.js";
 
 export async function onRequestPost({ request, env }) {
 
@@ -72,4 +72,3 @@ export async function onRequestPost({ request, env }) {
     }, 502);
   }
 }
-```
