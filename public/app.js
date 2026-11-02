@@ -15,7 +15,7 @@ const state = {
   utterance: null,
   isRestoringProgress: false,
   translatedChapter: null,
-  showingTranslation: false
+  showingTranslation: false,
   readerPages: [],
   readerPage: 0
 };
@@ -1111,12 +1111,12 @@ async function syncPrivateProgressFromServer(bookId) {
         )
       );
 
-    renderChapter();
-restoreReadingPosition(saved.position);
+      renderChapter(saved.position);
     }
 
     $("#syncStatus").textContent =
       "Progreso del libro privado sincronizado.";
+
   } catch (error) {
     console.error(
       "Error al sincronizar el progreso privado:",
@@ -1125,12 +1125,13 @@ restoreReadingPosition(saved.position);
 
     $("#syncStatus").textContent =
       "No se pudo sincronizar el progreso privado.";
+
   } finally {
     state.isRestoringProgress = false;
 
     if (
       state.currentBook?.isPrivate &&
-      String(state.currentBook.id) === String(bookId) &&
+      String(state.currentBook?.id) === String(bookId) &&
       state.user
     ) {
       queueProgressSave();
@@ -1170,17 +1171,18 @@ async function syncProgressFromServer(bookId) {
         )
       );
 
-      renderChapter();
-      restoreReadingPosition(saved.position);
+      renderChapter(saved.position);
     }
 
     $("#syncStatus").textContent =
       "Progreso sincronizado con tu cuenta.";
+
   } catch (error) {
     console.error("Error al sincronizar el progreso:", error);
 
     $("#syncStatus").textContent =
       "No se pudo sincronizar tu progreso.";
+
   } finally {
     state.isRestoringProgress = false;
 
@@ -1193,7 +1195,6 @@ async function syncProgressFromServer(bookId) {
     }
   }
 }
-
 /* ========================================
    ABRIR LIBROS
 ======================================== */
@@ -1396,13 +1397,11 @@ function toggleChapterTranslation() {
 
   renderChapter();
 }
-
-
 /* ========================================
    RENDERIZAR CAPÍTULO
 ======================================== */
 
-function renderChapter() {
+function renderChapter(positionToRestore = null) {
   if (!state.content?.chapters?.length) return;
 
   const chapters = state.content.chapters;
@@ -1458,10 +1457,14 @@ function renderChapter() {
 
   requestAnimationFrame(() => {
     paginateReaderContent(paragraphs);
+
+    if (positionToRestore !== null) {
+      restoreReadingPosition(positionToRestore);
+    }
+
     queueProgressSave();
   });
 }
-
 
 /* ========================================
    NARRACIÓN DE VOZ
@@ -1660,15 +1663,6 @@ bindEvent("#readerDialog", "close", () => {
 
   document.body.classList.remove("reader-open");
 });
-
-bindEvent("#readerDialog", "scroll", () => {
-  queueProgressSave();
-}, { passive: true });
-
-bindEvent("#readerText", "scroll", () => {
-  updateReaderPageControls();
-  queueProgressSave();
-}, { passive: true });
 
 
 window.addEventListener("resize", () => {
