@@ -1118,79 +1118,300 @@ button:disabled {
   }
 }
 
-
 /* ========================================
-   LECTOR TIPO LIBRO
+   PAPERMAKER · LECTOR EDITORIAL
 ======================================== */
 
-#readerText {
-  display: block;
-  box-sizing: border-box;
-  width: 100%;
-  max-width: 100%;
-  height: min(68vh, 720px);
-  min-height: 400px;
-
-  overflow-x: auto;
-  overflow-y: hidden;
-
-  column-count: 2;
-  column-gap: 48px;
-  column-fill: auto;
-
-  padding: 30px 38px;
-
-  font-family: Georgia, "Times New Roman", serif;
-  line-height: 1.85;
-
-  scroll-behavior: smooth;
-  overscroll-behavior-x: contain;
+.reader-dialog {
+  width: min(1450px, calc(100% - 32px));
+  height: min(94vh, 1000px);
+  max-height: 94vh;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 14px;
+  background: #e9e6dc;
+  box-shadow: 0 30px 100px rgba(0,0,0,.30);
 }
 
-#readerText p {
-  margin: 0 0 1.2em;
+.reader-header {
+  position: relative;
+  z-index: 5;
+  min-height: 76px;
+  padding: 14px 26px;
+  background: #fff;
+  border-bottom: 1px solid #e6e2d8;
+}
+
+.reader-toolbar {
+  position: relative;
+  z-index: 5;
+  padding: 11px 24px;
+  background: #fff;
+  border-bottom: 1px solid #e6e2d8;
+}
+
+.reader-layout {
+  display: grid;
+  grid-template-columns: 235px minmax(0, 1fr);
+  height: calc(100% - 145px);
+  min-height: 0;
+}
+
+.chapter-sidebar {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 24px 15px;
+  background: #f0eee7;
+  border-right: 1px solid #dedbd1;
+}
+
+.reader-page {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  padding: 22px 28px 12px;
+  overflow: hidden;
+  background: #e9e6dc;
+}
+
+.reader-rights {
+  flex: 0 0 auto;
+  margin-bottom: 8px;
+  text-align: center;
+  font-size: 11px;
+  color: #77766e;
+}
+
+.reader-page h2 {
+  flex: 0 0 auto;
+  margin: 5px 0 17px;
+  text-align: center;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 25px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: #343b32;
+}
+
+/* ÁREA DE LAS PÁGINAS */
+
+#readerText {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  background: transparent;
+}
+
+/* CADA PÁGINA */
+
+.reader-paper-page {
+  position: relative;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  padding: 38px 35px 48px;
+  background: #fffdf7;
+  border: 1px solid #e5e0d4;
+  box-shadow: 0 4px 15px rgba(48, 42, 29, .09);
+  color: #292b26;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 19px;
+  line-height: 1.75;
+}
+
+.reader-paper-page p {
+  margin: 0 0 1.15em;
   text-align: justify;
-  break-inside: avoid;
+  text-indent: 1.3em;
+  overflow-wrap: break-word;
+}
+
+.reader-paper-page p:first-child {
+  text-indent: 0;
+}
+
+.reader-paper-page-number {
+  position: absolute;
+  right: 0;
+  bottom: 17px;
+  left: 0;
+  text-align: center;
+  color: #999487;
+  font-family: Georgia, serif;
+  font-size: 11px;
 }
 
 .reader-page-controls {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  padding: 18px 10px;
-  flex-wrap: wrap;
+  gap: 18px;
+  padding: 13px 8px 7px;
 }
 
 #readerPageStatus {
-  font-size: 14px;
-  font-weight: 600;
-  min-width: 105px;
+  min-width: 125px;
+  color: #625f55;
   text-align: center;
+  font-size: 13px;
+  font-weight: 650;
 }
 
-.reader-page-controls button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+.reader-page-controls button {
+  min-height: 37px;
+  padding: 7px 14px;
+  font-size: 12px;
 }
 
-/* CELULARES */
+.sync-status {
+  flex: 0 0 auto;
+  padding: 10px 20px;
+  text-align: center;
+  background: #fff;
+}
+
+/* TEMA OSCURO */
+
+.dark-reader {
+  background: #20241f;
+}
+
+.dark-reader .reader-header,
+.dark-reader .reader-toolbar,
+.dark-reader .sync-status {
+  background: #292e28;
+  color: #e8e8df;
+  border-color: #42483f;
+}
+
+.dark-reader .reader-page {
+  background: #20241f;
+}
+
+.dark-reader .reader-page h2 {
+  color: #e8e8df;
+}
+
+.dark-reader .reader-rights {
+  color: #aaa99e;
+}
+
+.dark-reader .reader-paper-page {
+  background: #30342d;
+  border-color: #45483e;
+  color: #e9e6dc;
+}
+
+.dark-reader .reader-paper-page-number {
+  color: #aaa99e;
+}
+
+.dark-reader .chapter-sidebar {
+  background: #252a24;
+  border-color: #42483f;
+}
+
+.dark-reader .chapter-item {
+  color: #d0d5ca;
+}
+
+.dark-reader .chapter-item.active {
+  background: #47775e;
+  color: #fff;
+}
+
+.dark-reader #readerPageStatus {
+  color: #d0d5ca;
+}
+
+/* MÓVIL: UNA PÁGINA */
 
 @media (max-width: 700px) {
+  .reader-dialog {
+    width: calc(100% - 10px);
+    height: 96vh;
+    max-height: 96vh;
+    border-radius: 10px;
+  }
+
+  .reader-layout {
+    display: flex;
+    height: calc(100% - 145px);
+    flex-direction: column;
+  }
+
+  .chapter-sidebar {
+    flex: 0 0 auto;
+    max-height: 115px;
+    padding: 10px 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  #chapterList {
+    display: flex;
+    max-height: 65px;
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .chapter-item {
+    flex: 0 0 150px;
+    font-size: 11px;
+  }
+
+  .reader-page {
+    padding: 12px 9px 5px;
+  }
+
+  .reader-page h2 {
+    margin: 4px 0 10px;
+    font-size: 21px;
+  }
+
   #readerText {
-    height: 65vh;
-    min-height: 350px;
-    column-count: 1;
-    column-gap: 0;
-    padding: 22px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .reader-paper-page {
+    padding: 28px 23px 42px;
+    font-size: 17px;
+    line-height: 1.8;
   }
 
   .reader-page-controls {
     gap: 8px;
+    padding: 10px 2px;
   }
 
   .reader-page-controls button {
-    font-size: 13px;
-    padding: 9px 12px;
+    min-height: 34px;
+    padding: 6px 9px;
+    font-size: 11px;
+  }
+
+  #readerPageStatus {
+    min-width: 90px;
+    font-size: 11px;
+  }
+
+  .reader-toolbar {
+    gap: 5px;
+    padding: 8px;
+  }
+
+  .reader-toolbar .button {
+    min-height: 33px;
+    padding: 5px 8px;
+    font-size: 11px;
   }
 }
