@@ -1117,3 +1117,80 @@ button:disabled {
     animation-duration: .01ms !important;
   }
 }
+
+
+/* ========================================
+   LECTOR TIPO LIBRO
+======================================== */
+
+#readerText {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  height: min(68vh, 720px);
+  min-height: 400px;
+
+  overflow-x: auto;
+  overflow-y: hidden;
+
+  column-count: 2;
+  column-gap: 48px;
+  column-fill: auto;
+
+  padding: 30px 38px;
+
+  font-family: Georgia, "Times New Roman", serif;
+  line-height: 1.85;
+
+  scroll-behavior: smooth;
+  overscroll-behavior-x: contain;
+}
+
+#readerText p {
+  margin: 0 0 1.2em;
+  text-align: justify;
+  break-inside: avoid;
+}
+
+.reader-page-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 18px 10px;
+  flex-wrap: wrap;
+}
+
+#readerPageStatus {
+  font-size: 14px;
+  font-weight: 600;
+  min-width: 105px;
+  text-align: center;
+}
+
+.reader-page-controls button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* CELULARES */
+
+@media (max-width: 700px) {
+  #readerText {
+    height: 65vh;
+    min-height: 350px;
+    column-count: 1;
+    column-gap: 0;
+    padding: 22px;
+  }
+
+  .reader-page-controls {
+    gap: 8px;
+  }
+
+  .reader-page-controls button {
+    font-size: 13px;
+    padding: 9px 12px;
+  }
+}
