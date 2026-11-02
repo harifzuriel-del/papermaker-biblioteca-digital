@@ -1,4 +1,3 @@
-
 const $ = (s) => document.querySelector(s);
 
 const state = {
@@ -17,6 +16,8 @@ const state = {
   isRestoringProgress: false,
   translatedChapter: null,
   showingTranslation: false
+  readerPages: [],
+  readerPage: 0
 };
 
 const esc = (value) =>
@@ -753,73 +754,49 @@ async function logout() {
   toast("Has cerrado sesión.");
 }
 
+
 /* ========================================
-   PAGINACIÓN DEL LECTOR
+   PAGINACIÓN REAL DEL LIBRO
 ======================================== */
 
 function getReaderScrollContainer() {
   return $("#readerText");
 }
 
-function getReadingPosition() {
-  const container = getReaderScrollContainer();
-
-  if (!container || !container.clientWidth) {
-    return 0;
-  }
-
-  return Math.max(
-    0,
-    Math.round(container.scrollLeft / container.clientWidth)
-  );
+function getPagesPerSpread() {
+  return window.innerWidth <= 700 ? 1 : 2;
 }
 
-function restoreReadingPosition(position) {
-  const container = getReaderScrollContainer();
+function getReaderPageCount() {
+  return Math.max(1, state.readerPages.length);
+}
 
-  if (!container) return;
-
-  const page = Math.max(0, Number(position) || 0);
-
-  requestAnimationFrame(() => {
-    const total = getReaderPageCount();
-    const target = Math.min(page, total - 1);
-
-    container.scrollLeft = target * container.clientWidth;
-
-    updateReaderPageControls();
-  });
+function getReadingPosition() {
+  return Math.max(0, Number(state.readerPage) || 0);
 }
 
 function ensureReaderPageControls() {
   const readerText = $("#readerText");
 
-  if (!readerText || $("#readerPageControls")) {
-    return;
-  }
+  if (!readerText || $("#readerPageControls")) return;
 
   const controls = document.createElement("div");
-
   controls.id = "readerPageControls";
   controls.className = "reader-page-controls";
 
   controls.innerHTML = `
-    <button
-      id="readerPagePrev"
-      class="button button-outline"
-      type="button">
-      ← Página anterior
+    <button id="readerPagePrev"
+      class="button button-outline" type="button">
+      ← Anterior
     </button>
 
     <span id="readerPageStatus" aria-live="polite">
       Página 1 de 1
     </span>
 
-    <button
-      id="readerPageNext"
-      class="button"
-      type="button">
-      Página siguiente →
+    <button id="readerPageNext"
+      class="button" type="button">
+      Siguiente →
     </button>
   `;
 
@@ -834,73 +811,213 @@ function ensureReaderPageControls() {
   });
 }
 
-function getReaderPageCount() {
-  const container = $("#readerText");
-
-  if (!container || !container.clientWidth) {
-    return 1;
-  }
-
-  return Math.max(
-    1,
-    Math.ceil(container.scrollWidth / container.clientWidth)
-  );
-}
-
 function updateReaderPageControls() {
-  const container = $("#readerText");
   const status = $("#readerPageStatus");
   const previous = $("#readerPagePrev");
   const next = $("#readerPageNext");
 
-  if (!container || !status || !previous || !next) {
-    return;
-  }
+  if (!status || !previous || !next) return;
 
-  const width = container.clientWidth || 1;
   const total = getReaderPageCount();
+  const perSpread = getPagesPerSpread();
 
-  const current = Math.min(
-    total - 1,
-    Math.max(
-      0,
-      Math.round(container.scrollLeft / width)
-    )
+  const spread = Math.floor(state.readerPage / perSpread);
+  const totalSpreads = Math.ceil(total / perSpread);
+
+  const firstPage = spread * perSpread + 1;
+  const lastPage = Math.min(total, firstPage + perSpread - 1);
+
+  status.textContent = firstPage === lastPage
+    ? `Página ${firstPage} de ${total}`
+    : `Páginas ${firstPage}-${lastPage} de ${total}`;
+
+  previous.disabled = state.readerPage <= 0;
+  next.disabled = state.readerPage + perSpread >= total;
+}
+
+function displayReaderSpread() {
+  const container = $("#readerText");
+  if (!container) return;
+
+  const perSpread = getPagesPerSpread();
+  const start = Math.floor(state.readerPage / perSpread) * perSpread;
+
+  const visiblePages = state.readerPages.slice(
+    start,
+    start + perSpread
   );
 
-  status.textContent =
-    `Página ${current + 1} de ${total}`;
+  container.innerHTML = visiblePages.map((html, index) => `
+    <article class="reader-paper-page">
+      ${html}
+      <span class="reader-paper-page-number">
+        ${start + index + 1}
+      </span>
+    </article>
+  `).join("");
 
-  previous.disabled = current <= 0;
-  next.disabled = current >= total - 1;
+  updateReaderPageControls();
 }
 
 function changeReaderPage(direction) {
+  const perSpread = getPagesPerSpread();
+
+  const total = getReaderPageCount();
+  const totalSpreads = Math.ceil(total / perSpread);
+
+  const currentSpread = Math.floor(
+    state.readerPage / perSpread
+  );
+
+  const nextSpread = Math.max(
+    0,
+    Math.min(totalSpreads - 1, currentSpread + direction)
+  );
+
+  state.readerPage = nextSpread * perSpread;
+
+  displayReaderSpread();
+  queueProgressSave();
+}
+
+function restoreReadingPosition(position) {
+  const total = getReaderPageCount();
+
+  state.readerPage = Math.max(
+    0,
+    Math.min(Number(position) || 0, total - 1)
+  );
+
+  displayReaderSpread();
+}
+
+function paginateReaderContent(paragraphs) {
   const container = $("#readerText");
 
-  if (!container || !container.clientWidth) {
+  if (!container) return;
+
+  const perSpread = getPagesPerSpread();
+
+  const pageWidth = perSpread === 1
+    ? container.clientWidth
+    : (container.clientWidth - 18) / 2;
+
+  const pageHeight = container.clientHeight;
+
+  if (!pageWidth || !pageHeight) {
+    requestAnimationFrame(() => {
+      paginateReaderContent(paragraphs);
+    });
     return;
   }
 
-  const width = container.clientWidth;
-  const total = getReaderPageCount();
+  const probe = document.createElement("article");
+  probe.className = "reader-paper-page";
+  probe.style.position = "absolute";
+  probe.style.visibility = "hidden";
+  probe.style.left = "-10000px";
+  probe.style.top = "0";
+  probe.style.width = `${pageWidth}px`;
+  probe.style.height = `${pageHeight}px`;
 
-  const current = Math.round(
-    container.scrollLeft / width
+  document.body.appendChild(probe);
+
+  const pages = [];
+  let currentPage = [];
+  let currentHeight = 0;
+
+  const computed = getComputedStyle(probe);
+  const contentHeight =
+    pageHeight -
+    parseFloat(computed.paddingTop) -
+    parseFloat(computed.paddingBottom);
+
+  function savePage() {
+    if (!currentPage.length) return;
+
+    pages.push(currentPage.join(""));
+    currentPage = [];
+    currentHeight = 0;
+    probe.innerHTML = "";
+  }
+
+  function addParagraph(text) {
+    const paragraph = document.createElement("p");
+    paragraph.textContent = text;
+    probe.appendChild(paragraph);
+
+    const height = paragraph.getBoundingClientRect().height;
+
+    if (currentHeight + height <= contentHeight) {
+      currentPage.push(`<p>${esc(text)}</p>`);
+      currentHeight += height;
+      return;
+    }
+
+    probe.removeChild(paragraph);
+
+    if (currentPage.length) {
+      savePage();
+      addParagraph(text);
+      return;
+    }
+
+    /* Párrafo demasiado largo: dividir por palabras */
+    const words = text.split(/\s+/);
+    let remaining = words;
+
+    while (remaining.length) {
+      let low = 1;
+      let high = remaining.length;
+      let best = 1;
+
+      while (low <= high) {
+        const middle = Math.floor((low + high) / 2);
+        const part = remaining.slice(0, middle).join(" ");
+
+        const test = document.createElement("p");
+        test.textContent = part;
+        probe.appendChild(test);
+
+        const fits =
+          test.getBoundingClientRect().height <= contentHeight;
+
+        probe.removeChild(test);
+
+        if (fits) {
+          best = middle;
+          low = middle + 1;
+        } else {
+          high = middle - 1;
+        }
+      }
+
+      const part = remaining.slice(0, best).join(" ");
+      currentPage.push(`<p>${esc(part)}</p>`);
+
+      remaining = remaining.slice(best);
+
+      savePage();
+    }
+  }
+
+  for (const paragraph of paragraphs) {
+    addParagraph(String(paragraph));
+  }
+
+  savePage();
+  probe.remove();
+
+  state.readerPages = pages.length ? pages : [""];
+
+  state.readerPage = Math.min(
+    state.readerPage,
+    state.readerPages.length - 1
   );
 
-  const target = Math.max(
-    0,
-    Math.min(total - 1, current + direction)
-  );
-
-  container.scrollTo({
-    left: target * width,
-    behavior: "smooth"
-  });
-
-  queueProgressSave();
+  displayReaderSpread();
 }
+
 
 /* ========================================
    GUARDAR PROGRESO
@@ -994,8 +1111,8 @@ async function syncPrivateProgressFromServer(bookId) {
         )
       );
 
-      renderChapter();
-      restoreReadingPosition(saved.position);
+    renderChapter();
+restoreReadingPosition(saved.position);
     }
 
     $("#syncStatus").textContent =
@@ -1280,6 +1397,7 @@ function toggleChapterTranslation() {
   renderChapter();
 }
 
+
 /* ========================================
    RENDERIZAR CAPÍTULO
 ======================================== */
@@ -1308,13 +1426,11 @@ function renderChapter() {
   $("#chapterTitle").textContent =
     chapter.title || originalChapter.title;
 
-  const readerText = $("#readerText");
+  $("#readerText").innerHTML = "";
+  $("#readerText").style.fontSize = `${state.fontSize}px`;
 
-  readerText.innerHTML = (chapter.paragraphs || [])
-    .map(paragraph => `<p>${esc(paragraph)}</p>`)
-    .join("");
-
-  readerText.style.fontSize = `${state.fontSize}px`;
+  state.readerPages = [];
+  state.readerPage = 0;
 
   ensureReaderPageControls();
 
@@ -1338,13 +1454,14 @@ function renderChapter() {
 
   updateTranslationButton();
 
-  requestAnimationFrame(() => {
-    readerText.scrollLeft = 0;
-    updateReaderPageControls();
-  });
+  const paragraphs = chapter.paragraphs || [];
 
-  queueProgressSave();
+  requestAnimationFrame(() => {
+    paginateReaderContent(paragraphs);
+    queueProgressSave();
+  });
 }
+
 
 /* ========================================
    NARRACIÓN DE VOZ
@@ -1553,9 +1670,21 @@ bindEvent("#readerText", "scroll", () => {
   queueProgressSave();
 }, { passive: true });
 
+
 window.addEventListener("resize", () => {
-  requestAnimationFrame(updateReaderPageControls);
+  if (!state.content?.chapters?.length) return;
+
+  const chapter = state.showingTranslation
+    ? state.translatedChapter
+    : state.content.chapters[state.chapter];
+
+  if (!chapter?.paragraphs) return;
+
+  requestAnimationFrame(() => {
+    paginateReaderContent(chapter.paragraphs);
+  });
 });
+
 
 /* CAPÍTULOS */
 
@@ -1602,6 +1731,9 @@ bindEvent("#nextChapter", "click", () => {
 
 /* TAMAÑO DE LETRA */
 
+
+/* TAMAÑO DE LETRA */
+
 bindEvent("#fontDown", "click", () => {
   state.fontSize = Math.max(15, state.fontSize - 1);
 
@@ -1610,7 +1742,15 @@ bindEvent("#fontDown", "click", () => {
   if (readerText) {
     readerText.style.fontSize = `${state.fontSize}px`;
 
-    requestAnimationFrame(updateReaderPageControls);
+    const paragraphs = state.showingTranslation
+      ? state.translatedChapter?.paragraphs
+      : state.content?.chapters?.[state.chapter]?.paragraphs;
+
+    if (paragraphs) {
+      requestAnimationFrame(() => {
+        paginateReaderContent(paragraphs);
+      });
+    }
   }
 });
 
@@ -1622,9 +1762,18 @@ bindEvent("#fontUp", "click", () => {
   if (readerText) {
     readerText.style.fontSize = `${state.fontSize}px`;
 
-    requestAnimationFrame(updateReaderPageControls);
+    const paragraphs = state.showingTranslation
+      ? state.translatedChapter?.paragraphs
+      : state.content?.chapters?.[state.chapter]?.paragraphs;
+
+    if (paragraphs) {
+      requestAnimationFrame(() => {
+        paginateReaderContent(paragraphs);
+      });
+    }
   }
 });
+
 
 /* TEMA Y NARRACIÓN */
 
