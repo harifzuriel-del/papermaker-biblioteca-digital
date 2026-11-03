@@ -1754,6 +1754,7 @@ function getCurrentParagraphAnchor() {
   return anchors[state.readerPage] ?? 0;
 }
 
+
 function restoreParagraphAnchor(paragraphIndex) {
   const anchors = state.readerPageAnchors || [];
 
@@ -1772,17 +1773,16 @@ function restoreParagraphAnchor(paragraphIndex) {
   }
 
   state.readerPage = Math.max(0, targetPage);
+
   state.readerPage = Math.min(
     state.readerPage,
     state.readerPages.length - 1
   );
 
   displayReaderSpread();
+
+  queueProgressSave();
 }
-
-
-/* TAMAÑO DE LETRA */
-
 
 /* TAMAÑO DE LETRA */
 
