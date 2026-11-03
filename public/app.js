@@ -891,6 +891,7 @@ function restoreReadingPosition(position) {
   displayReaderSpread();
 }
 
+
 function paginateReaderContent(paragraphs) {
   const container = $("#readerText");
 
@@ -923,10 +924,14 @@ function paginateReaderContent(paragraphs) {
   document.body.appendChild(probe);
 
   const pages = [];
+  const pageAnchors = [];
+
   let currentPage = [];
   let currentHeight = 0;
+  let currentStartIndex = null;
 
   const computed = getComputedStyle(probe);
+
   const contentHeight =
     pageHeight -
     parseFloat(computed.paddingTop) -
@@ -936,12 +941,16 @@ function paginateReaderContent(paragraphs) {
     if (!currentPage.length) return;
 
     pages.push(currentPage.join(""));
+    pageAnchors.push(currentStartIndex);
+
     currentPage = [];
     currentHeight = 0;
+    currentStartIndex = null;
+
     probe.innerHTML = "";
   }
 
-  function addParagraph(text) {
+  function addParagraph(text, paragraphIndex) {
     const paragraph = document.createElement("p");
     paragraph.textContent = text;
     probe.appendChild(paragraph);
@@ -949,6 +958,10 @@ function paginateReaderContent(paragraphs) {
     const height = paragraph.getBoundingClientRect().height;
 
     if (currentHeight + height <= contentHeight) {
+      if (currentStartIndex === null) {
+        currentStartIndex = paragraphIndex;
+      }
+
       currentPage.push(`<p>${esc(text)}</p>`);
       currentHeight += height;
       return;
@@ -958,7 +971,7 @@ function paginateReaderContent(paragraphs) {
 
     if (currentPage.length) {
       savePage();
-      addParagraph(text);
+      addParagraph(text, paragraphIndex);
       return;
     }
 
@@ -993,6 +1006,11 @@ function paginateReaderContent(paragraphs) {
       }
 
       const part = remaining.slice(0, best).join(" ");
+
+      if (currentStartIndex === null) {
+        currentStartIndex = paragraphIndex;
+      }
+
       currentPage.push(`<p>${esc(part)}</p>`);
 
       remaining = remaining.slice(best);
@@ -1001,14 +1019,15 @@ function paginateReaderContent(paragraphs) {
     }
   }
 
-  for (const paragraph of paragraphs) {
-    addParagraph(String(paragraph));
-  }
+  paragraphs.forEach((paragraph, index) => {
+    addParagraph(String(paragraph), index);
+  });
 
   savePage();
   probe.remove();
 
   state.readerPages = pages.length ? pages : [""];
+  state.readerPageAnchors = pageAnchors;
 
   state.readerPage = Math.min(
     state.readerPage,
@@ -1017,6 +1036,7 @@ function paginateReaderContent(paragraphs) {
 
   displayReaderSpread();
 }
+
 
 
 /* ========================================
@@ -1665,6 +1685,7 @@ bindEvent("#readerDialog", "close", () => {
 });
 
 
+
 window.addEventListener("resize", () => {
   if (!state.content?.chapters?.length) return;
 
@@ -1674,10 +1695,14 @@ window.addEventListener("resize", () => {
 
   if (!chapter?.paragraphs) return;
 
+  const paragraphAnchor = getCurrentParagraphAnchor();
+
   requestAnimationFrame(() => {
     paginateReaderContent(chapter.paragraphs);
+    restoreParagraphAnchor(paragraphAnchor);
   });
 });
+
 
 
 /* CAPÍTULOS */
@@ -1723,12 +1748,47 @@ bindEvent("#nextChapter", "click", () => {
   }
 });
 
+function getCurrentParagraphAnchor() {
+  const anchors = state.readerPageAnchors || [];
+
+  return anchors[state.readerPage] ?? 0;
+}
+
+function restoreParagraphAnchor(paragraphIndex) {
+  const anchors = state.readerPageAnchors || [];
+
+  let targetPage = anchors.findIndex(
+    index => index === paragraphIndex
+  );
+
+  if (targetPage === -1) {
+    for (let i = 0; i < anchors.length; i++) {
+      if (anchors[i] <= paragraphIndex) {
+        targetPage = i;
+      } else {
+        break;
+      }
+    }
+  }
+
+  state.readerPage = Math.max(0, targetPage);
+  state.readerPage = Math.min(
+    state.readerPage,
+    state.readerPages.length - 1
+  );
+
+  displayReaderSpread();
+}
+
+
 /* TAMAÑO DE LETRA */
 
 
 /* TAMAÑO DE LETRA */
 
 bindEvent("#fontDown", "click", () => {
+  const paragraphAnchor = getCurrentParagraphAnchor();
+
   state.fontSize = Math.max(15, state.fontSize - 1);
 
   const readerText = $("#readerText");
@@ -1743,12 +1803,15 @@ bindEvent("#fontDown", "click", () => {
     if (paragraphs) {
       requestAnimationFrame(() => {
         paginateReaderContent(paragraphs);
+        restoreParagraphAnchor(paragraphAnchor);
       });
     }
   }
 });
 
 bindEvent("#fontUp", "click", () => {
+  const paragraphAnchor = getCurrentParagraphAnchor();
+
   state.fontSize = Math.min(28, state.fontSize + 1);
 
   const readerText = $("#readerText");
@@ -1763,10 +1826,12 @@ bindEvent("#fontUp", "click", () => {
     if (paragraphs) {
       requestAnimationFrame(() => {
         paginateReaderContent(paragraphs);
+        restoreParagraphAnchor(paragraphAnchor);
       });
     }
   }
 });
+
 
 
 /* TEMA Y NARRACIÓN */
