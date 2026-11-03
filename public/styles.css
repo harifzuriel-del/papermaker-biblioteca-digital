@@ -1415,3 +1415,254 @@ button:disabled {
     font-size: 11px;
   }
 }
+
+/* ==========================================
+   PAPERMAKER · REDISEÑO DEL LIBRO ABIERTO
+   ========================================== */
+
+/* Ventana principal más amplia */
+.reader-dialog {
+  width: min(1650px, calc(100% - 24px));
+  height: 96vh;
+  max-height: 96vh;
+  border-radius: 18px;
+  background: #d9d4c8;
+  box-shadow:
+    0 35px 100px rgba(0, 0, 0, .38),
+    0 8px 25px rgba(0, 0, 0, .16);
+}
+
+/* Encabezado del libro */
+.reader-header {
+  min-height: 82px;
+  padding: 15px 30px;
+  background: linear-gradient(
+    110deg,
+    #fffefa,
+    #f6f2e9
+  );
+}
+
+/* Barra de herramientas */
+.reader-toolbar {
+  min-height: 55px;
+  align-items: center;
+  padding: 10px 28px;
+  background: #faf8f2;
+}
+
+/* Distribución general */
+.reader-layout {
+  grid-template-columns: 285px minmax(0, 1fr);
+  height: calc(100% - 151px);
+}
+
+/* Índice de capítulos */
+.chapter-sidebar {
+  padding: 28px 17px;
+  background: linear-gradient(
+    180deg,
+    #f5f2e9,
+    #eae6dc
+  );
+}
+
+.chapter-sidebar h3 {
+  margin-bottom: 20px;
+  color: #777264;
+  font-size: 11px;
+  letter-spacing: 1.6px;
+}
+
+#chapterList {
+  gap: 8px;
+}
+
+.chapter-item {
+  padding: 12px 13px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: #56564e;
+  font-size: 13px;
+  line-height: 1.45;
+  transition:
+    background .2s,
+    border-color .2s,
+    transform .2s;
+}
+
+.chapter-item:hover {
+  transform: translateX(2px);
+  border-color: #d8d1c2;
+  background: #e8e2d5;
+}
+
+.chapter-item.active {
+  background: #285c47;
+  box-shadow: 0 4px 12px rgba(40, 92, 71, .18);
+  color: #fff;
+}
+
+/* Zona de lectura */
+.reader-page {
+  padding: 25px clamp(18px, 3vw, 42px) 12px;
+  background:
+    radial-gradient(
+      ellipse at center,
+      #e7e0d2 0%,
+      #d9d3c6 100%
+    );
+}
+
+.reader-page h2 {
+  margin: 7px 0 22px;
+  color: #39362e;
+  font-size: 28px;
+}
+
+/* Doble página: aspecto de libro abierto */
+#readerText {
+  position: relative;
+  isolation: isolate;
+  gap: 14px;
+  padding: 7px 10px 12px;
+  overflow: hidden;
+}
+
+/* Cada hoja */
+.reader-paper-page {
+  position: relative;
+  z-index: 1;
+  padding: 46px 42px 52px;
+  border: 1px solid #e1d8c8;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(139, 119, 83, .055),
+      transparent 12%,
+      transparent 88%,
+      rgba(139, 119, 83, .025)
+    ),
+    repeating-linear-gradient(
+      0deg,
+      rgba(130, 112, 82, .012) 0px,
+      rgba(130, 112, 82, .012) 1px,
+      transparent 1px,
+      transparent 4px
+    ),
+    #fffdf5;
+  box-shadow:
+    0 5px 9px rgba(48, 40, 26, .08),
+    0 17px 32px rgba(48, 40, 26, .12),
+    inset 0 0 24px rgba(151, 129, 91, .045);
+  color: #302d27;
+  font-family: Georgia, "Times New Roman", serif;
+  line-height: 1.85;
+}
+
+/* Sombreado del lomo: entre las dos hojas */
+#readerText::before {
+  position: absolute;
+  z-index: 2;
+  top: 7px;
+  bottom: 12px;
+  left: 50%;
+  width: 30px;
+  transform: translateX(-50%);
+  background: linear-gradient(
+    90deg,
+    rgba(65, 52, 34, .10),
+    rgba(65, 52, 34, .025) 35%,
+    rgba(255, 255, 255, .25) 50%,
+    rgba(65, 52, 34, .025) 70%,
+    rgba(65, 52, 34, .10)
+  );
+  pointer-events: none;
+  content: "";
+}
+
+/* Texto de las páginas */
+.reader-paper-page p {
+  margin-bottom: 1.2em;
+  text-align: justify;
+  text-indent: 1.4em;
+  overflow-wrap: break-word;
+}
+
+.reader-paper-page p:first-child {
+  text-indent: 0;
+}
+
+/* Número de página */
+.reader-paper-page-number {
+  bottom: 19px;
+  color: #958b78;
+  font-size: 11px;
+  letter-spacing: .5px;
+}
+
+/* Navegación */
+.reader-page-controls {
+  gap: 22px;
+  padding: 15px 8px 10px;
+}
+
+#readerPageStatus {
+  color: #565044;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Estado de sincronización */
+.sync-status {
+  background: #f8f6ef;
+  color: #777264;
+}
+
+/* ==========================================
+   TABLETAS
+   ========================================== */
+
+@media (max-width: 900px) {
+  .reader-layout {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .reader-paper-page {
+    padding: 32px 25px 45px;
+  }
+}
+
+/* ==========================================
+   MÓVILES
+   ========================================== */
+
+@media (max-width: 700px) {
+  .reader-dialog {
+    width: calc(100% - 8px);
+    height: 97vh;
+    max-height: 97vh;
+    border-radius: 12px;
+  }
+
+  .reader-layout {
+    height: calc(100% - 151px);
+  }
+
+  #readerText {
+    padding: 5px;
+  }
+
+  #readerText::before {
+    display: none;
+  }
+
+  .reader-paper-page {
+    padding: 30px 24px 45px;
+    background: #fffdf5;
+    box-shadow:
+      0 5px 18px rgba(48, 40, 26, .14),
+      inset 0 0 20px rgba(151, 129, 91, .04);
+  }
+}
+
