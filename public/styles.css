@@ -1599,11 +1599,22 @@ button:disabled {
 }
 
 /* Número de página */
-.reader-paper-page-number {
-  bottom: 19px;
-  color: #958b78;
-  font-size: 11px;
+#readerText .reader-paper-page-number {
+  position: absolute;
+  display: block;
+  bottom: 20px;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  color: #625748;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 15px;
+  font-weight: 700;
   letter-spacing: .5px;
+  line-height: 1;
+  text-align: center;
+  opacity: 1;
+  pointer-events: none;
 }
 
 /* Navegación */
