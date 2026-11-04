@@ -165,15 +165,74 @@
         <nav id="chapterList" aria-label="Capítulos"></nav>
       </aside>
 
-      <article class="reader-page">
-        <p id="readerRights" class="reader-rights"></p>
-        <h2 id="chapterTitle">Capítulo</h2>
-        <div id="readerText" class="reader-text"></div>
-        <div class="chapter-navigation">
-          <button id="prevChapter" class="button button-outline" type="button">← Anterior</button>
-          <button id="nextChapter" class="button" type="button">Siguiente capítulo →</button>
-        </div>
-      </article>
+      
+<article class="reader-page">
+  <p id="readerRights" class="reader-rights"></p>
+  <h2 id="chapterTitle">Capítulo</h2>
+
+  <div class="reader-book-stage">
+    <div class="reader-book">
+      <div class="reader-book-pages" aria-hidden="true">
+        <span class="reader-book-page-edge"></span>
+        <span class="reader-book-page-edge"></span>
+        <span class="reader-book-page-edge"></span>
+      </div>
+
+      <div class="reader-book-spine" aria-hidden="true"></div>
+
+      <div id="readerText" class="reader-text"></div>
+    </div>
+
+    <div class="reader-ribbon" aria-hidden="true"></div>
+  </div>
+
+  <section id="studyPanel" class="study-panel">
+    <div class="study-panel-header">
+      <strong>Herramientas de lectura</strong>
+      <button
+        id="toggleStudyPanel"
+        class="button button-outline"
+        type="button"
+        aria-expanded="true"
+      >
+        Ocultar
+      </button>
+    </div>
+
+    <div id="studyTools" class="study-tools">
+      <div class="study-highlight-tools">
+        <span>Resaltar:</span>
+        <button type="button" class="highlight-color" data-highlight-color="#ffe66d" aria-label="Amarillo" style="--highlight-color:#ffe66d"></button>
+        <button type="button" class="highlight-color" data-highlight-color="#a8e6a3" aria-label="Verde" style="--highlight-color:#a8e6a3"></button>
+        <button type="button" class="highlight-color" data-highlight-color="#9ed8ff" aria-label="Azul" style="--highlight-color:#9ed8ff"></button>
+        <button type="button" class="highlight-color" data-highlight-color="#ffb6cf" aria-label="Rosa" style="--highlight-color:#ffb6cf"></button>
+        <button type="button" class="highlight-color" data-highlight-color="#d8b8ff" aria-label="Morado" style="--highlight-color:#d8b8ff"></button>
+      </div>
+
+      <div class="study-actions">
+        <button id="addStudyNote" class="button button-outline" type="button">
+          ✎ Añadir nota
+        </button>
+        <button id="addStudyBookmark" class="button button-outline" type="button">
+          ◇ Marcar página
+        </button>
+        <button id="viewStudyNotes" class="button button-outline" type="button">
+          ☷ Mis anotaciones
+        </button>
+      </div>
+
+      <p id="studySelectionStatus" aria-live="polite">
+        Selecciona un fragmento del libro para resaltarlo o añadir una nota.
+      </p>
+    </div>
+  </section>
+
+  <div class="chapter-navigation">
+    <button id="prevChapter" class="button button-outline" type="button">← Anterior</button>
+    <button id="nextChapter" class="button" type="button">Siguiente capítulo →</button>
+  </div>
+</article>
+
     </div>
 
     <p id="syncStatus" class="sync-status" aria-live="polite"></p>
