@@ -1666,3 +1666,306 @@ button:disabled {
   }
 }
 
+/* ==========================================
+   PAPERMAKER - LIBRO FÍSICO REALISTA
+   ========================================== */
+
+.reader-book-stage {
+  position: relative;
+  width: 100%;
+  padding: 28px 22px 38px;
+  perspective: 1800px;
+  overflow: visible;
+}
+
+.reader-book {
+  position: relative;
+  width: 100%;
+  min-height: 570px;
+  padding: 15px;
+  border-radius: 7px 12px 12px 7px;
+  background:
+    linear-gradient(90deg,
+      #b9a98d 0%,
+      #e1d3b9 2%,
+      #f4ead8 5%,
+      #e8dcc6 50%,
+      #f4ead8 95%,
+      #c8b99e 100%);
+  box-shadow:
+    0 24px 45px rgba(0, 0, 0, .28),
+    0 8px 15px rgba(0, 0, 0, .18),
+    inset 0 0 12px rgba(80, 55, 30, .22);
+  transform: rotateX(1deg);
+}
+
+/* Hojas acumuladas en los bordes */
+
+.reader-book-pages {
+  position: absolute;
+  z-index: 0;
+  inset: 8px -7px 5px 8px;
+  pointer-events: none;
+}
+
+.reader-book-page-edge {
+  position: absolute;
+  inset: 0;
+  border-radius: 5px 10px 10px 5px;
+  background: #eee4d1;
+  border: 1px solid #cfc2aa;
+  box-shadow: 2px 2px 0 #c9baa0;
+}
+
+.reader-book-page-edge:nth-child(1) {
+  transform: translate(4px, 4px);
+}
+
+.reader-book-page-edge:nth-child(2) {
+  transform: translate(7px, 7px);
+}
+
+.reader-book-page-edge:nth-child(3) {
+  transform: translate(10px, 10px);
+}
+
+/* Lomo central */
+
+.reader-book-spine {
+  position: absolute;
+  z-index: 4;
+  top: 15px;
+  bottom: 15px;
+  left: 50%;
+  width: 30px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    rgba(75, 52, 29, .16),
+    rgba(255, 255, 255, .25) 35%,
+    rgba(80, 55, 30, .20) 65%,
+    rgba(75, 52, 29, .12)
+  );
+}
+
+/* Área de páginas */
+
+#readerText.reader-text {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0;
+  min-height: 540px;
+  padding: 22px 18px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: transparent;
+}
+
+/* Cada hoja */
+
+#readerText .reader-paper-page {
+  position: relative;
+  min-width: 0;
+  min-height: 490px;
+  padding: 35px 32px 48px;
+  color: #332b22;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(120, 95, 60, .018) 0px,
+      rgba(120, 95, 60, .018) 1px,
+      transparent 1px,
+      transparent 4px
+    ),
+    linear-gradient(90deg, #fffdf7, #f8f1e4);
+  box-shadow:
+    inset 0 0 18px rgba(90, 65, 35, .055);
+}
+
+#readerText .reader-paper-page:first-child {
+  border-radius: 5px 0 0 5px;
+  box-shadow:
+    inset -15px 0 20px -18px rgba(60, 40, 20, .45),
+    inset 0 0 15px rgba(90, 65, 35, .04);
+}
+
+#readerText .reader-paper-page:last-child {
+  border-radius: 0 5px 5px 0;
+  box-shadow:
+    inset 15px 0 20px -18px rgba(60, 40, 20, .45),
+    inset 0 0 15px rgba(90, 65, 35, .04);
+}
+
+/* Texto de las hojas */
+
+#readerText .reader-paper-page p {
+  color: #332b22;
+  line-height: 1.85;
+  text-align: justify;
+  margin: 0 0 17px;
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+#readerText .reader-page-number {
+  position: absolute;
+  bottom: 16px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  color: #9a8a73;
+  font-size: 12px;
+}
+
+/* Separador tipo cinta */
+
+.reader-ribbon {
+  position: absolute;
+  z-index: 6;
+  bottom: 5px;
+  left: 50%;
+  width: 19px;
+  height: 85px;
+  transform: translateX(10px);
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    #8d1725,
+    #c63846 45%,
+    #941d2c
+  );
+  box-shadow: 2px 3px 5px rgba(0, 0, 0, .25);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 82%, 0 100%);
+}
+
+/* Panel de herramientas de estudio */
+
+.study-panel {
+  margin: 28px 0 20px;
+  padding: 18px;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  box-shadow: 0 5px 18px rgba(0, 0, 0, .07);
+}
+
+.study-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.study-panel-header strong {
+  font-size: 16px;
+}
+
+.study-tools {
+  display: grid;
+  gap: 16px;
+}
+
+.study-highlight-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.highlight-color {
+  width: 29px;
+  height: 29px;
+  padding: 0;
+  border: 2px solid rgba(0, 0, 0, .15);
+  border-radius: 50%;
+  background: var(--highlight-color);
+  cursor: pointer;
+  transition: transform .18s, box-shadow .18s;
+}
+
+.highlight-color:hover {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, .10);
+}
+
+.study-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+#studySelectionStatus {
+  margin: 0;
+  color: var(--muted, #777);
+  font-size: 13px;
+}
+
+/* Panel contraído */
+
+.study-panel.collapsed #studyTools {
+  display: none;
+}
+
+.study-panel.collapsed .study-panel-header {
+  margin-bottom: 0;
+}
+
+/* Adaptación a pantallas pequeñas */
+
+@media (max-width: 850px) {
+  .reader-book-stage {
+    padding: 15px 8px 30px;
+  }
+
+  .reader-book {
+    min-height: 500px;
+    padding: 9px;
+  }
+
+  #readerText.reader-text {
+    min-height: 470px;
+    padding: 12px 8px;
+  }
+
+  #readerText .reader-paper-page {
+    min-height: 430px;
+    padding: 25px 17px 42px;
+  }
+}
+
+@media (max-width: 600px) {
+  .reader-book {
+    min-height: 440px;
+  }
+
+  #readerText.reader-text {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 410px;
+  }
+
+  #readerText .reader-paper-page {
+    min-height: 390px;
+    padding: 25px 22px 42px;
+  }
+
+  #readerText .reader-paper-page:nth-child(2) {
+    display: none;
+  }
+
+  .reader-book-spine {
+    display: none;
+  }
+
+  .reader-ribbon {
+    height: 65px;
+  }
+
+  .study-panel {
+    padding: 13px;
+  }
+}
+
+
