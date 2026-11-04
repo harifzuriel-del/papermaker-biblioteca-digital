@@ -1236,15 +1236,20 @@ button:disabled {
   text-indent: 0;
 }
 
-.reader-paper-page-number {
+#readerText .reader-paper-page-number {
   position: absolute;
-  right: 0;
-  bottom: 17px;
+  display: block;
+  bottom: 16px;
   left: 0;
+  right: 0;
+  z-index: 20;
   text-align: center;
-  color: #999487;
+  color: #625748;
   font-family: Georgia, serif;
-  font-size: 11px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
 }
 
 .reader-page-controls {
