@@ -1968,4 +1968,68 @@ button:disabled {
   }
 }
 
+/* ==========================================
+   CORRECCIÓN DEL SCROLL Y CENTRADO DEL LECTOR
+   ========================================== */
+
+#readerDialog.reader-dialog {
+  position: fixed;
+  inset: 16px;
+  margin: auto;
+
+  width: min(1400px, calc(100vw - 32px));
+  max-width: 1400px;
+
+  height: auto;
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+
+  overflow-x: hidden;
+  overflow-y: auto;
+
+  box-sizing: border-box;
+  overscroll-behavior: contain;
+}
+
+/* Mantener el contenido centrado */
+
+#readerDialog .reader-layout {
+  width: 100%;
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box;
+  align-items: start;
+}
+
+/* Evitar que el libro se corte por altura */
+
+#readerDialog .reader-page {
+  min-width: 0;
+  min-height: auto;
+  height: auto;
+  overflow: visible;
+}
+
+/* Permitir que aparezcan las herramientas inferiores */
+
+#readerDialog .reader-book-stage,
+#readerDialog .study-panel,
+#readerDialog .chapter-navigation {
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+/* En pantallas pequeñas */
+
+@media (max-width: 700px) {
+  #readerDialog.reader-dialog {
+    inset: 8px;
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+}
+
+
 
