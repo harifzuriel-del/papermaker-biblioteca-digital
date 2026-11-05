@@ -1773,9 +1773,12 @@ button:disabled {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0;
+  height: 540px;
   min-height: 540px;
+  max-height: 540px;
   padding: 22px 18px;
   overflow: hidden;
+  box-sizing: border-box;
   border-radius: 5px;
   background: transparent;
 }
@@ -1941,10 +1944,12 @@ button:disabled {
     padding: 9px;
   }
 
-  #readerText.reader-text {
-    min-height: 470px;
-    padding: 12px 8px;
-  }
+ #readerText.reader-text {
+  height: 470px;
+  min-height: 470px;
+  max-height: 470px;
+  padding: 12px 8px;
+}
 
   #readerText .reader-paper-page {
     min-height: 430px;
@@ -1958,9 +1963,11 @@ button:disabled {
   }
 
   #readerText.reader-text {
-    grid-template-columns: minmax(0, 1fr);
-    min-height: 410px;
-  }
+  grid-template-columns: minmax(0, 1fr);
+  height: 410px;
+  min-height: 410px;
+  max-height: 410px;
+}
 
   #readerText .reader-paper-page {
     min-height: 390px;
