@@ -7,12 +7,17 @@ import {
 } from "../../_lib.js";
 
 // ==========================================
-// CONFIGURACIÓN DE TRADUCCIÓN
+// CONFIGURACIÓN
 // ==========================================
 
 const MAX_CHAPTER_LENGTH = 120000;
-const MAX_CHUNK_LENGTH = 4000;
-const TRANSLATION_TIMEOUT = 45000;
+
+// Fragmentos pequeños para reducir omisiones
+// del modelo de traducción.
+const MAX_CHUNK_LENGTH = 350;
+
+const AI_MODEL = "@cf/meta/m2m100-1.2b";
+const TARGET_LANGUAGE = "es";
 
 
 // ==========================================
@@ -20,7 +25,6 @@ const TRANSLATION_TIMEOUT = 45000;
 // ==========================================
 
 function splitIntoChunks(text, maxLength = MAX_CHUNK_LENGTH) {
-
   const sentences =
     text.match(/[^.!?]+[.!?]+(?:["'”’)\]]+)?|[^.!?]+$/g) || [text];
 
@@ -28,14 +32,11 @@ function splitIntoChunks(text, maxLength = MAX_CHUNK_LENGTH) {
   let current = "";
 
   for (const sentence of sentences) {
-
     const part = sentence.trim();
 
     if (!part) continue;
 
-    // Si la oración cabe, intentamos agregarla completa.
     if (part.length <= maxLength) {
-
       if (
         current &&
         current.length + part.length + 1 > maxLength
@@ -48,9 +49,6 @@ function splitIntoChunks(text, maxLength = MAX_CHUNK_LENGTH) {
       continue;
     }
 
-    // Si una oración es demasiado larga,
-    // la dividimos por palabras.
-
     if (current) {
       chunks.push(current);
       current = "";
@@ -60,8 +58,10 @@ function splitIntoChunks(text, maxLength = MAX_CHUNK_LENGTH) {
     let wordChunk = "";
 
     for (const word of words) {
-
-      if (wordChunk && wordChunk.length + word.length + 1 > maxLength) {
+      if (
+        wordChunk &&
+        wordChunk.length + word.length + 1 > maxLength
+      ) {
         chunks.push(wordChunk);
         wordChunk = "";
       }
@@ -70,7 +70,7 @@ function splitIntoChunks(text, maxLength = MAX_CHUNK_LENGTH) {
     }
 
     if (wordChunk) {
-      current = wordChunk;
+      chunks.push(wordChunk);
     }
   }
 
@@ -83,72 +83,141 @@ function splitIntoChunks(text, maxLength = MAX_CHUNK_LENGTH) {
 
 
 // ==========================================
-// TRADUCIR UN FRAGMENTO
+// TRADUCIR CON WORKERS AI
 // ==========================================
 
-async function translateChunk(text, translatorUrl) {
+async function translateWithWorkersAI(text, env) {
+  if (!env.AI) {
+    throw new Error("El binding Workers AI no está disponible.");
+  }
+
+  const result = await env.AI.run(AI_MODEL, {
+    text,
+    source_lang: "en",
+    target_lang: "es"
+  });
+
+  if (
+    !result ||
+    typeof result.translated_text !== "string" ||
+    !result.translated_text.trim()
+  ) {
+    throw new Error("Workers AI devolvió una traducción vacía.");
+  }
+
+  return result.translated_text.trim();
+}
+
+
+// ==========================================
+// TRADUCIR CON LIBRETRANSLATE
+// ==========================================
+
+async function translateWithLibreTranslate(text, env) {
+  const translatorUrl = env.LIBRETRANSLATE_URL;
+
+  if (!translatorUrl) {
+    throw new Error("LibreTranslate no está configurado.");
+  }
 
   const response = await fetch(
     translatorUrl.replace(/\/+$/, "") + "/translate",
     {
       method: "POST",
-
       headers: {
         "Content-Type": "application/json"
       },
-
       body: JSON.stringify({
         q: text,
         source: "en",
         target: "es",
         format: "text"
       }),
-
-      signal: AbortSignal.timeout(TRANSLATION_TIMEOUT)
+      signal: AbortSignal.timeout(45000)
     }
   );
 
   if (!response.ok) {
     throw new Error(
-      `El servicio de traducción respondió con HTTP ${response.status}.`
+      `LibreTranslate respondió con HTTP ${response.status}.`
     );
   }
 
-  const translation = await response.json();
+  const result = await response.json();
 
   if (
-    !translation ||
-    typeof translation.translatedText !== "string" ||
-    !translation.translatedText.trim()
+    !result ||
+    typeof result.translatedText !== "string" ||
+    !result.translatedText.trim()
   ) {
-    throw new Error("El traductor devolvió una respuesta vacía.");
+    throw new Error("LibreTranslate devolvió una traducción vacía.");
   }
 
-  return translation.translatedText.trim();
+  return result.translatedText.trim();
 }
 
 
 // ==========================================
-// TRADUCIR UN PÁRRAFO COMPLETO
+// MOTOR HÍBRIDO
+// WORKERS AI PRIMERO
+// LIBRETRANSLATE COMO RESPALDO
 // ==========================================
 
-async function translateParagraph(paragraph, translatorUrl) {
+async function translateChunk(text, env) {
+  try {
+    const translated = await translateWithWorkersAI(text, env);
 
-  const chunks = splitIntoChunks(paragraph);
+    return {
+      text: translated,
+      motor: "workers-ai"
+    };
 
-  const translatedParts = [];
-
-  // Se traducen secuencialmente para no sobrecargar
-  // el servicio gratuito de LibreTranslate.
-
-  for (const chunk of chunks) {
-
-    const translated = await translateChunk(
-      chunk,
-      translatorUrl
+  } catch (aiError) {
+    console.error(
+      "Workers AI no pudo traducir el fragmento. Se intentará LibreTranslate:",
+      aiError
     );
 
-    translatedParts.push(translated);
+    try {
+      const translated = await translateWithLibreTranslate(text, env);
+
+      return {
+        text: translated,
+        motor: "libretranslate"
+      };
+
+    } catch (fallbackError) {
+      console.error(
+        "También falló LibreTranslate:",
+        fallbackError
+      );
+
+      throw new Error(
+        "No fue posible traducir un fragmento con ninguno de los motores."
+      );
+    }
+  }
+}
+
+
+// ==========================================
+// TRADUCIR UN PÁRRAFO
+// ==========================================
+
+async function translateParagraph(paragraph, env, stats) {
+  const chunks = splitIntoChunks(paragraph);
+  const translatedParts = [];
+
+  for (const chunk of chunks) {
+    const result = await translateChunk(chunk, env);
+
+    translatedParts.push(result.text);
+
+    if (result.motor === "workers-ai") {
+      stats.workersAI++;
+    } else {
+      stats.libreTranslate++;
+    }
   }
 
   return translatedParts.join(" ");
@@ -278,11 +347,10 @@ export async function onRequestPost({ request, env, params }) {
 
 
   // ------------------------------------------
-  // 7. VALIDAR TAMAÑO DEL CAPÍTULO
+  // 7. VALIDAR TAMAÑO
   // ------------------------------------------
 
   const paragraphs = chapter.paragraphs;
-
   const originalText = paragraphs.join("\n\n");
 
   if (!originalText.trim()) {
@@ -291,39 +359,78 @@ export async function onRequestPost({ request, env, params }) {
     }, 400);
   }
 
-  // Límite de seguridad para evitar procesamientos
-  // excesivamente grandes en el servicio gratuito.
-
   if (originalText.length > MAX_CHAPTER_LENGTH) {
     return json({
-      error: "El capítulo supera el límite de 120,000 caracteres. Intenta dividirlo en capítulos más pequeños."
+      error: "El capítulo supera el límite de 120,000 caracteres."
     }, 413);
   }
 
 
   // ------------------------------------------
-  // 8. COMPROBAR SERVICIO DE TRADUCCIÓN
+  // 8. COMPROBAR TRADUCCIÓN GUARDADA
   // ------------------------------------------
 
-  const translatorUrl = env.LIBRETRANSLATE_URL;
+  try {
+    const saved = await env.DB.prepare(
+      `SELECT paragraphs_json
+       FROM private_book_translations
+       WHERE book_id = ?
+         AND user_id = ?
+         AND chapter_index = ?
+         AND language = ?`
+    ).bind(
+      book.id,
+      user.id,
+      body.chapter,
+      TARGET_LANGUAGE
+    ).first();
 
-  if (!translatorUrl) {
+    if (saved) {
+      const savedParagraphs = JSON.parse(
+        saved.paragraphs_json
+      );
+
+      if (
+        Array.isArray(savedParagraphs) &&
+        savedParagraphs.length === paragraphs.length
+      ) {
+        return json({
+          ok: true,
+          chapter: body.chapter,
+          title: chapter.title,
+          paragraphs: savedParagraphs,
+          language: TARGET_LANGUAGE,
+          cached: true,
+          motor: "database"
+        });
+      }
+    }
+
+  } catch (error) {
+    console.error(
+      "Error consultando traducción guardada:",
+      error
+    );
+
     return json({
-      error: "El servicio de traducción no está configurado."
+      error: "No se pudo consultar el historial de traducciones."
     }, 500);
   }
 
 
   // ------------------------------------------
-  // 9. TRADUCIR PÁRRAFOS POR FRAGMENTOS
+  // 9. TRADUCIR PÁRRAFOS
   // ------------------------------------------
 
   const translatedParagraphs = [];
 
+  const stats = {
+    workersAI: 0,
+    libreTranslate: 0
+  };
+
   try {
-
     for (const paragraph of paragraphs) {
-
       if (
         typeof paragraph !== "string" ||
         !paragraph.trim()
@@ -334,33 +441,76 @@ export async function onRequestPost({ request, env, params }) {
 
       const translated = await translateParagraph(
         paragraph,
-        translatorUrl
+        env,
+        stats
       );
 
       translatedParagraphs.push(translated);
     }
 
   } catch (error) {
-
     console.error(
       "Error durante la traducción:",
       error
     );
 
-    const message =
-      error?.name === "TimeoutError" ||
-      error?.name === "AbortError"
-        ? "El servicio de traducción tardó demasiado. Intenta nuevamente."
-        : "No se pudo completar la traducción. Comprueba que LibreTranslate esté funcionando e inténtalo nuevamente.";
-
     return json({
-      error: message
+      error: error?.message ||
+        "No se pudo completar la traducción.",
+      guardado: false
     }, 502);
   }
 
 
   // ------------------------------------------
-  // 10. DEVOLVER CAPÍTULO TRADUCIDO
+  // 10. GUARDAR TRADUCCIÓN EN D1
+  // ------------------------------------------
+
+  try {
+    await env.DB.prepare(
+      `INSERT INTO private_book_translations
+       (
+         book_id,
+         user_id,
+         chapter_index,
+         language,
+         paragraphs_json,
+         updated_at
+       )
+       VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+
+       ON CONFLICT (
+         book_id,
+         user_id,
+         chapter_index,
+         language
+       )
+       DO UPDATE SET
+         paragraphs_json = excluded.paragraphs_json,
+         updated_at = CURRENT_TIMESTAMP`
+    ).bind(
+      book.id,
+      user.id,
+      body.chapter,
+      TARGET_LANGUAGE,
+      JSON.stringify(translatedParagraphs)
+    ).run();
+
+  } catch (error) {
+    console.error(
+      "Error guardando traducción en D1:",
+      error
+    );
+
+    return json({
+      error: "La traducción se realizó, pero no pudo guardarse en la base de datos.",
+      guardado: false
+    }, 500);
+  }
+
+
+  // ------------------------------------------
+  // 11. DEVOLVER CAPÍTULO TRADUCIDO
   // ------------------------------------------
 
   return json({
@@ -368,7 +518,10 @@ export async function onRequestPost({ request, env, params }) {
     chapter: body.chapter,
     title: chapter.title,
     paragraphs: translatedParagraphs,
-    language: "es"
+    language: TARGET_LANGUAGE,
+    cached: false,
+    guardado: true,
+    motores: stats
   });
 
 }
