@@ -6,34 +6,42 @@ import {
 } from "./_lib.js";
 
 export async function onRequestPost({ request, env }) {
-
-  // Validar origen
   if (!sameOrigin(request)) {
     return json({ error: "Origen no permitido." }, 403);
   }
 
-  // Validar sesión
   const user = await currentUser(request, env);
 
   if (!user) {
-    return json({
-      error: "Inicia sesión para realizar la prueba."
-    }, 401);
+    return json({ error: "Inicia sesión para realizar la prueba." }, 401);
   }
 
-  // Comprobar binding
   if (!env.AI) {
-    return json({
-      error: "El binding AI no está disponible."
-    }, 500);
+    return json({ error: "El binding AI no está disponible." }, 500);
   }
 
-  // Texto de prueba
-  const originalText =
-    "The journey of life is not about finding yourself, but about creating yourself. Every experience teaches us something new.";
+  let body;
 
   try {
+    body = await request.json();
+  } catch {
+    return json({ error: "El cuerpo de la solicitud no es válido." }, 400);
+  }
 
+  const originalText = String(body?.text || "").trim();
+
+  if (!originalText) {
+    return json({ error: "Debes enviar un texto para traducir." }, 400);
+  }
+
+  if (originalText.length > 4000) {
+    return json({
+      error: "El texto supera el límite de prueba de 4,000 caracteres.",
+      caracteres: originalText.length
+    }, 400);
+  }
+
+  try {
     const result = await env.AI.run(
       "@cf/meta/m2m100-1.2b",
       {
@@ -58,12 +66,13 @@ export async function onRequestPost({ request, env }) {
       ok: true,
       motor: "PaperMaker Translate",
       modelo: "@cf/meta/m2m100-1.2b",
+      caracteres_originales: originalText.length,
+      caracteres_traducidos: result.translated_text.length,
       original: originalText,
       traduccion: result.translated_text
     });
 
   } catch (error) {
-
     console.error("Error Workers AI:", error);
 
     return json({
@@ -72,3 +81,4 @@ export async function onRequestPost({ request, env }) {
     }, 502);
   }
 }
+
