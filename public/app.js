@@ -1299,6 +1299,66 @@ async function openPrivateBook(id) {
       $("#syncStatus").textContent =
         "Inicia sesión para guardar tu progreso.";
     }
+
+    // ==========================================
+    // RECUPERAR TRADUCCIÓN GUARDADA
+    // ==========================================
+
+    if (
+      state.user &&
+      canTranslateCurrentBook()
+    ) {
+      const bookId = String(state.currentBook.id);
+      const chapterIndex = state.chapter;
+
+      try {
+        const originalParagraphs =
+          state.content?.chapters?.[chapterIndex]?.paragraphs;
+
+        if (!Array.isArray(originalParagraphs)) {
+          return;
+        }
+
+        const result = await api(
+          `/api/private-books/${encodeURIComponent(bookId)}/translate?chapter=${chapterIndex}`
+        );
+
+        // Comprobar que el usuario sigue en el mismo libro y capítulo.
+        if (
+          String(state.currentBook?.id) !== bookId ||
+          state.chapter !== chapterIndex
+        ) {
+          return;
+        }
+
+        // Solo cargar si el servidor confirma que está completa.
+        if (
+          result?.complete === true &&
+          Array.isArray(result.paragraphs) &&
+          result.paragraphs.length === originalParagraphs.length
+        ) {
+          state.translatedChapter = {
+            bookId,
+            chapter: chapterIndex,
+            title:
+              result.title ||
+              state.content.chapters[chapterIndex].title,
+            paragraphs: result.paragraphs
+          };
+
+          state.showingTranslation = true;
+
+          renderChapter();
+        }
+
+      } catch (translationError) {
+        console.error(
+          "No se pudo recuperar la traducción guardada:",
+          translationError
+        );
+      }
+    }
+
   } catch (error) {
     console.error("Error al abrir el libro privado:", error);
     toast(error.message);
