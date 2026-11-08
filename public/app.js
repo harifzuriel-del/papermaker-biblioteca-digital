@@ -1305,8 +1305,9 @@ async function openPrivateBook(id) {
   }
 }
 
+
 /* ========================================
-   TRADUCCIÓN
+   TRADUCCIÓN POR BLOQUES
 ======================================== */
 
 function canTranslateCurrentBook() {
@@ -1351,21 +1352,118 @@ async function translateCurrentChapter() {
 
   if (button) {
     button.disabled = true;
-    button.textContent = "Traduciendo…";
+    button.textContent = "Preparando traducción…";
   }
 
   try {
     stopSpeech();
 
-    const result = await api(
-      `/api/private-books/${encodeURIComponent(bookId)}/translate`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          chapter: chapterIndex
-        })
+    const originalParagraphs =
+      state.content?.chapters?.[chapterIndex]?.paragraphs;
+
+    if (!Array.isArray(originalParagraphs)) {
+      throw new Error("No se encontraron los párrafos del capítulo.");
+    }
+
+    const total = originalParagraphs.length;
+
+    const translatedParagraphs = new Array(total).fill("");
+
+    let startIndex = 0;
+    let completed = false;
+
+    while (!completed) {
+
+      // Evitar aplicar resultados a otro libro o capítulo.
+
+      if (
+        String(state.currentBook?.id) !== bookId ||
+        state.chapter !== chapterIndex
+      ) {
+        return;
       }
-    );
+
+      if (button) {
+        button.textContent =
+          `Traduciendo… ${Math.min(startIndex, total)}/${total}`;
+      }
+
+      const result = await api(
+        `/api/private-books/${encodeURIComponent(bookId)}/translate`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            chapter: chapterIndex,
+            startIndex,
+            batchSize: 3
+          })
+        }
+      );
+
+      if (
+        String(state.currentBook?.id) !== bookId ||
+        state.chapter !== chapterIndex
+      ) {
+        return;
+      }
+
+      if (!result?.ok) {
+        throw new Error(
+          result?.error || "No se pudo traducir el bloque."
+        );
+      }
+
+      // Recibir los párrafos traducidos en este bloque.
+
+      if (Array.isArray(result.items)) {
+        for (const item of result.items) {
+          if (
+            Number.isInteger(item.index) &&
+            item.index >= 0 &&
+            item.index < total &&
+            typeof item.text === "string"
+          ) {
+            translatedParagraphs[item.index] = item.text;
+          }
+        }
+      }
+
+      // Al terminar, el servidor devuelve el capítulo completo.
+
+      if (
+        result.complete === true &&
+        Array.isArray(result.paragraphs) &&
+        result.paragraphs.length === total
+      ) {
+        translatedParagraphs.splice(
+          0,
+          total,
+          ...result.paragraphs
+        );
+
+        completed = true;
+        break;
+      }
+
+      // El servidor indica dónde continuar.
+
+      if (
+        !Number.isInteger(result.nextIndex) ||
+        result.nextIndex < 0 ||
+        result.nextIndex >= total
+      ) {
+        throw new Error(
+          "El servidor devolvió una posición de avance no válida."
+        );
+      }
+
+      if (button) {
+        button.textContent =
+          `Traduciendo… ${result.completed}/${total} (${result.progress}%)`;
+      }
+
+      startIndex = result.nextIndex;
+    }
 
     if (
       String(state.currentBook?.id) !== bookId ||
@@ -1374,29 +1472,32 @@ async function translateCurrentChapter() {
       return;
     }
 
-    if (!result?.ok || !Array.isArray(result.paragraphs)) {
-      throw new Error("El servidor no devolvió una traducción válida.");
-    }
-
     state.translatedChapter = {
       bookId,
       chapter: chapterIndex,
-      title: result.title ||
+      title:
         state.content.chapters[chapterIndex].title,
-      paragraphs: result.paragraphs
+      paragraphs: translatedParagraphs
     };
 
     state.showingTranslation = true;
 
     renderChapter();
 
-    toast("Capítulo traducido al español.");
+    toast("Capítulo traducido y guardado correctamente.");
+
   } catch (error) {
     console.error("Error al traducir el capítulo:", error);
 
-    toast(error.message || "No se pudo traducir el capítulo.");
+    toast(
+      error.message ||
+      "No se pudo completar la traducción. Puedes intentarlo nuevamente."
+    );
+
   } finally {
-    if (button) button.disabled = false;
+    if (button) {
+      button.disabled = false;
+    }
 
     updateTranslationButton();
   }
@@ -1417,6 +1518,7 @@ function toggleChapterTranslation() {
 
   renderChapter();
 }
+
 /* ========================================
    RENDERIZAR CAPÍTULO
 ======================================== */
