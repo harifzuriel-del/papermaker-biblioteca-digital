@@ -11,14 +11,13 @@ import {
 // ==========================================
 
 const MAX_CHAPTER_LENGTH = 120000;
-
-// Fragmentos pequeños para reducir omisiones
-// del modelo de traducción.
 const MAX_CHUNK_LENGTH = 350;
+const DEFAULT_BATCH_SIZE = 3;
+const MAX_BATCH_SIZE = 5;
 
 const AI_MODEL = "@cf/meta/m2m100-1.2b";
+const SOURCE_LANGUAGE = "en";
 const TARGET_LANGUAGE = "es";
-
 
 // ==========================================
 // DIVIDIR TEXTO EN FRAGMENTOS
@@ -37,10 +36,7 @@ function splitIntoChunks(text, maxLength = MAX_CHUNK_LENGTH) {
     if (!part) continue;
 
     if (part.length <= maxLength) {
-      if (
-        current &&
-        current.length + part.length + 1 > maxLength
-      ) {
+      if (current && current.length + part.length + 1 > maxLength) {
         chunks.push(current);
         current = "";
       }
@@ -58,10 +54,7 @@ function splitIntoChunks(text, maxLength = MAX_CHUNK_LENGTH) {
     let wordChunk = "";
 
     for (const word of words) {
-      if (
-        wordChunk &&
-        wordChunk.length + word.length + 1 > maxLength
-      ) {
+      if (wordChunk && wordChunk.length + word.length + 1 > maxLength) {
         chunks.push(wordChunk);
         wordChunk = "";
       }
@@ -69,21 +62,16 @@ function splitIntoChunks(text, maxLength = MAX_CHUNK_LENGTH) {
       wordChunk += (wordChunk ? " " : "") + word;
     }
 
-    if (wordChunk) {
-      chunks.push(wordChunk);
-    }
+    if (wordChunk) chunks.push(wordChunk);
   }
 
-  if (current) {
-    chunks.push(current);
-  }
+  if (current) chunks.push(current);
 
   return chunks;
 }
 
-
 // ==========================================
-// TRADUCIR CON WORKERS AI
+// WORKERS AI
 // ==========================================
 
 async function translateWithWorkersAI(text, env) {
@@ -93,8 +81,8 @@ async function translateWithWorkersAI(text, env) {
 
   const result = await env.AI.run(AI_MODEL, {
     text,
-    source_lang: "en",
-    target_lang: "es"
+    source_lang: SOURCE_LANGUAGE,
+    target_lang: TARGET_LANGUAGE
   });
 
   if (
@@ -108,9 +96,8 @@ async function translateWithWorkersAI(text, env) {
   return result.translated_text.trim();
 }
 
-
 // ==========================================
-// TRADUCIR CON LIBRETRANSLATE
+// LIBRETRANSLATE
 // ==========================================
 
 async function translateWithLibreTranslate(text, env) {
@@ -129,8 +116,8 @@ async function translateWithLibreTranslate(text, env) {
       },
       body: JSON.stringify({
         q: text,
-        source: "en",
-        target: "es",
+        source: SOURCE_LANGUAGE,
+        target: TARGET_LANGUAGE,
         format: "text"
       }),
       signal: AbortSignal.timeout(45000)
@@ -156,41 +143,29 @@ async function translateWithLibreTranslate(text, env) {
   return result.translatedText.trim();
 }
 
-
 // ==========================================
 // MOTOR HÍBRIDO
-// WORKERS AI PRIMERO
-// LIBRETRANSLATE COMO RESPALDO
 // ==========================================
 
 async function translateChunk(text, env) {
   try {
-    const translated = await translateWithWorkersAI(text, env);
-
     return {
-      text: translated,
+      text: await translateWithWorkersAI(text, env),
       motor: "workers-ai"
     };
-
   } catch (aiError) {
     console.error(
-      "Workers AI no pudo traducir el fragmento. Se intentará LibreTranslate:",
+      "Workers AI falló. Se intentará LibreTranslate:",
       aiError
     );
 
     try {
-      const translated = await translateWithLibreTranslate(text, env);
-
       return {
-        text: translated,
+        text: await translateWithLibreTranslate(text, env),
         motor: "libretranslate"
       };
-
     } catch (fallbackError) {
-      console.error(
-        "También falló LibreTranslate:",
-        fallbackError
-      );
+      console.error("También falló LibreTranslate:", fallbackError);
 
       throw new Error(
         "No fue posible traducir un fragmento con ninguno de los motores."
@@ -198,7 +173,6 @@ async function translateChunk(text, env) {
     }
   }
 }
-
 
 // ==========================================
 // TRADUCIR UN PÁRRAFO
@@ -223,6 +197,174 @@ async function translateParagraph(paragraph, env, stats) {
   return translatedParts.join(" ");
 }
 
+// ==========================================
+// CONSULTAR TRADUCCIÓN COMPLETA
+// ==========================================
+
+async function getCompleteTranslation(
+  env,
+  book,
+  user,
+  chapterIndex,
+  paragraphCount
+) {
+  const saved = await env.DB.prepare(
+    `SELECT paragraphs_json
+     FROM private_book_translations
+     WHERE book_id = ?
+       AND user_id = ?
+       AND chapter_index = ?
+       AND language = ?`
+  ).bind(
+    book.id,
+    user.id,
+    chapterIndex,
+    TARGET_LANGUAGE
+  ).first();
+
+  if (!saved) return null;
+
+  try {
+    const paragraphs = JSON.parse(saved.paragraphs_json);
+
+    if (
+      Array.isArray(paragraphs) &&
+      paragraphs.length === paragraphCount &&
+      paragraphs.every(value => typeof value === "string")
+    ) {
+      return paragraphs;
+    }
+  } catch (error) {
+    console.error("La caché completa no contiene JSON válido:", error);
+  }
+
+  return null;
+}
+
+// ==========================================
+// CONSULTAR PÁRRAFOS YA TRADUCIDOS
+// ==========================================
+
+async function getSavedParts(
+  env,
+  book,
+  user,
+  chapterIndex,
+  paragraphCount
+) {
+  const result = await env.DB.prepare(
+    `SELECT paragraph_index, translated_text
+     FROM private_book_translation_parts
+     WHERE book_id = ?
+       AND user_id = ?
+       AND chapter_index = ?
+       AND target_language = ?
+       AND paragraph_index >= 0
+       AND paragraph_index < ?
+     ORDER BY paragraph_index ASC`
+  ).bind(
+    String(book.id),
+    String(user.id),
+    chapterIndex,
+    TARGET_LANGUAGE,
+    paragraphCount
+  ).all();
+
+  const saved = new Map();
+
+  for (const row of result.results || []) {
+    saved.set(
+      Number(row.paragraph_index),
+      row.translated_text
+    );
+  }
+
+  return saved;
+}
+
+// ==========================================
+// GUARDAR UN PÁRRAFO INMEDIATAMENTE
+// ==========================================
+
+async function saveTranslatedPart(
+  env,
+  book,
+  user,
+  chapterIndex,
+  paragraphIndex,
+  translatedText
+) {
+  await env.DB.prepare(
+    `INSERT INTO private_book_translation_parts
+     (
+       book_id,
+       user_id,
+       chapter_index,
+       target_language,
+       paragraph_index,
+       translated_text,
+       updated_at
+     )
+     VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT (
+       book_id,
+       user_id,
+       chapter_index,
+       target_language,
+       paragraph_index
+     )
+     DO UPDATE SET
+       translated_text = excluded.translated_text,
+       updated_at = CURRENT_TIMESTAMP`
+  ).bind(
+    String(book.id),
+    String(user.id),
+    chapterIndex,
+    TARGET_LANGUAGE,
+    paragraphIndex,
+    translatedText
+  ).run();
+}
+
+// ==========================================
+// GUARDAR CAPÍTULO COMPLETO
+// ==========================================
+
+async function saveCompleteTranslation(
+  env,
+  book,
+  user,
+  chapterIndex,
+  translatedParagraphs
+) {
+  await env.DB.prepare(
+    `INSERT INTO private_book_translations
+     (
+       book_id,
+       user_id,
+       chapter_index,
+       language,
+       paragraphs_json,
+       updated_at
+     )
+     VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT (
+       book_id,
+       user_id,
+       chapter_index,
+       language
+     )
+     DO UPDATE SET
+       paragraphs_json = excluded.paragraphs_json,
+       updated_at = CURRENT_TIMESTAMP`
+  ).bind(
+    book.id,
+    user.id,
+    chapterIndex,
+    TARGET_LANGUAGE,
+    JSON.stringify(translatedParagraphs)
+  ).run();
+}
 
 // ==========================================
 // ENDPOINT PRINCIPAL
@@ -230,9 +372,9 @@ async function translateParagraph(paragraph, env, stats) {
 
 export async function onRequestPost({ request, env, params }) {
 
-  // ------------------------------------------
+  // ----------------------------------------
   // 1. VALIDAR ORIGEN
-  // ------------------------------------------
+  // ----------------------------------------
 
   if (!sameOrigin(request)) {
     return json({
@@ -240,10 +382,9 @@ export async function onRequestPost({ request, env, params }) {
     }, 403);
   }
 
-
-  // ------------------------------------------
+  // ----------------------------------------
   // 2. VALIDAR SESIÓN
-  // ------------------------------------------
+  // ----------------------------------------
 
   const user = await currentUser(request, env);
 
@@ -253,10 +394,9 @@ export async function onRequestPost({ request, env, params }) {
     }, 401);
   }
 
-
-  // ------------------------------------------
+  // ----------------------------------------
   // 3. LEER SOLICITUD
-  // ------------------------------------------
+  // ----------------------------------------
 
   const parsed = await bodyJsonLimited(request, 10000);
 
@@ -279,10 +419,34 @@ export async function onRequestPost({ request, env, params }) {
     }, 400);
   }
 
+  // batchSize activa el modo por bloques.
+  // Sin batchSize se conserva el comportamiento anterior.
 
-  // ------------------------------------------
+  const batchMode = body.batchSize !== undefined;
+
+  const batchSize = batchMode
+    ? body.batchSize
+    : DEFAULT_BATCH_SIZE;
+
+  const startIndex = batchMode
+    ? (body.startIndex ?? 0)
+    : 0;
+
+  if (
+    !Number.isInteger(startIndex) ||
+    startIndex < 0 ||
+    !Number.isInteger(batchSize) ||
+    batchSize < 1 ||
+    batchSize > MAX_BATCH_SIZE
+  ) {
+    return json({
+      error: "Los parámetros del bloque de traducción no son válidos."
+    }, 400);
+  }
+
+  // ----------------------------------------
   // 4. BUSCAR LIBRO DEL USUARIO
-  // ------------------------------------------
+  // ----------------------------------------
 
   const book = await env.DB.prepare(
     `SELECT id, language, content_json
@@ -296,21 +460,19 @@ export async function onRequestPost({ request, env, params }) {
     }, 404);
   }
 
+  // ----------------------------------------
+  // 5. VALIDAR IDIOMA DE ORIGEN
+  // ----------------------------------------
 
-  // ------------------------------------------
-  // 5. COMPROBAR IDIOMA
-  // ------------------------------------------
-
-  if (book.language !== "en") {
+  if (book.language !== SOURCE_LANGUAGE) {
     return json({
       error: "Por ahora la traducción está configurada para libros en inglés."
     }, 400);
   }
 
-
-  // ------------------------------------------
-  // 6. OBTENER CAPÍTULO
-  // ------------------------------------------
+  // ----------------------------------------
+  // 6. LEER CAPÍTULO
+  // ----------------------------------------
 
   let content;
 
@@ -345,12 +507,22 @@ export async function onRequestPost({ request, env, params }) {
     }, 400);
   }
 
-
-  // ------------------------------------------
-  // 7. VALIDAR TAMAÑO
-  // ------------------------------------------
-
   const paragraphs = chapter.paragraphs;
+
+  // ----------------------------------------
+  // 7. VALIDAR CONTENIDO
+  // ----------------------------------------
+
+  if (
+    paragraphs.some(
+      paragraph => typeof paragraph !== "string"
+    )
+  ) {
+    return json({
+      error: "El capítulo contiene párrafos con formato no válido."
+    }, 400);
+  }
+
   const originalText = paragraphs.join("\n\n");
 
   if (!originalText.trim()) {
@@ -365,163 +537,302 @@ export async function onRequestPost({ request, env, params }) {
     }, 413);
   }
 
+  const chapterIndex = body.chapter;
+  const total = paragraphs.length;
 
-  // ------------------------------------------
-  // 8. COMPROBAR TRADUCCIÓN GUARDADA
-  // ------------------------------------------
+  // ----------------------------------------
+  // 8. REVISAR CACHÉ COMPLETA
+  // ----------------------------------------
 
   try {
-    const saved = await env.DB.prepare(
-      `SELECT paragraphs_json
-       FROM private_book_translations
-       WHERE book_id = ?
-         AND user_id = ?
-         AND chapter_index = ?
-         AND language = ?`
-    ).bind(
-      book.id,
-      user.id,
-      body.chapter,
-      TARGET_LANGUAGE
-    ).first();
-
-    if (saved) {
-      const savedParagraphs = JSON.parse(
-        saved.paragraphs_json
-      );
-
-      if (
-        Array.isArray(savedParagraphs) &&
-        savedParagraphs.length === paragraphs.length
-      ) {
-        return json({
-          ok: true,
-          chapter: body.chapter,
-          title: chapter.title,
-          paragraphs: savedParagraphs,
-          language: TARGET_LANGUAGE,
-          cached: true,
-          motor: "database"
-        });
-      }
-    }
-
-  } catch (error) {
-    console.error(
-      "Error consultando traducción guardada:",
-      error
+    const complete = await getCompleteTranslation(
+      env,
+      book,
+      user,
+      chapterIndex,
+      total
     );
 
+    if (complete) {
+      if (batchMode) {
+        return json({
+          ok: true,
+          chapter: chapterIndex,
+          title: chapter.title,
+          complete: true,
+          cached: true,
+          total,
+          completed: total,
+          nextIndex: total,
+          progress: 100,
+          paragraphs: complete,
+          items: []
+        });
+      }
+
+      return json({
+        ok: true,
+        chapter: chapterIndex,
+        title: chapter.title,
+        paragraphs: complete,
+        language: TARGET_LANGUAGE,
+        cached: true,
+        motor: "database"
+      });
+    }
+  } catch (error) {
+    console.error("Error consultando traducción completa:", error);
+
     return json({
-      error: "No se pudo consultar el historial de traducciones."
+      error: "No se pudo consultar la traducción guardada."
     }, 500);
   }
 
+  // ----------------------------------------
+  // 9. RECUPERAR PROGRESO
+  // ----------------------------------------
 
-  // ------------------------------------------
-  // 9. TRADUCIR PÁRRAFOS
-  // ------------------------------------------
+  let savedParts;
 
-  const translatedParagraphs = [];
+  try {
+    savedParts = await getSavedParts(
+      env,
+      book,
+      user,
+      chapterIndex,
+      total
+    );
+  } catch (error) {
+    console.error("Error recuperando progreso:", error);
+
+    return json({
+      error: "No se pudo recuperar el progreso de traducción."
+    }, 500);
+  }
+
+  // ----------------------------------------
+  // 10. DETERMINAR PÁRRAFOS PENDIENTES
+  // ----------------------------------------
+
+  let indexes;
+
+  if (batchMode) {
+    indexes = [];
+
+    for (
+      let i = startIndex;
+      i < Math.min(startIndex + batchSize, total);
+      i++
+    ) {
+      if (!savedParts.has(i)) {
+        indexes.push(i);
+      }
+    }
+
+    // Si los primeros párrafos ya estaban guardados,
+    // avanzar hasta encontrar trabajo pendiente.
+
+    if (indexes.length === 0) {
+      for (let i = 0; i < total; i++) {
+        if (!savedParts.has(i)) {
+          indexes.push(i);
+          if (indexes.length >= batchSize) break;
+        }
+      }
+    }
+  } else {
+    indexes = [];
+
+    for (let i = 0; i < total; i++) {
+      if (!savedParts.has(i)) {
+        indexes.push(i);
+      }
+    }
+  }
+
+  // ----------------------------------------
+  // 11. TRADUCIR Y GUARDAR CADA PÁRRAFO
+  // ----------------------------------------
 
   const stats = {
     workersAI: 0,
     libreTranslate: 0
   };
 
+  const items = [];
+
   try {
-    for (const paragraph of paragraphs) {
-      if (
-        typeof paragraph !== "string" ||
-        !paragraph.trim()
-      ) {
-        translatedParagraphs.push("");
-        continue;
+    for (const index of indexes) {
+      const paragraph = paragraphs[index];
+
+      let translated = "";
+
+      if (paragraph.trim()) {
+        translated = await translateParagraph(
+          paragraph,
+          env,
+          stats
+        );
       }
 
-      const translated = await translateParagraph(
-        paragraph,
+      // Guardado inmediato:
+      // si la petición se interrumpe después,
+      // este párrafo ya estará disponible en D1.
+
+      await saveTranslatedPart(
         env,
-        stats
+        book,
+        user,
+        chapterIndex,
+        index,
+        translated
       );
 
-      translatedParagraphs.push(translated);
-    }
+      savedParts.set(index, translated);
 
+      items.push({
+        index,
+        text: translated
+      });
+    }
   } catch (error) {
-    console.error(
-      "Error durante la traducción:",
-      error
-    );
+    console.error("Error durante la traducción:", error);
 
     return json({
+      ok: false,
       error: error?.message ||
-        "No se pudo completar la traducción.",
-      guardado: false
+        "No se pudo completar este bloque.",
+      guardado: true,
+      items,
+      completed: savedParts.size,
+      total,
+      progress: Math.floor(
+        (savedParts.size / total) * 100
+      )
     }, 502);
   }
 
+  // ----------------------------------------
+  // 12. COMPROBAR SI TERMINÓ EL CAPÍTULO
+  // ----------------------------------------
 
-  // ------------------------------------------
-  // 10. GUARDAR TRADUCCIÓN EN D1
-  // ------------------------------------------
+  const complete = savedParts.size === total;
 
-  try {
-    await env.DB.prepare(
-      `INSERT INTO private_book_translations
-       (
-         book_id,
-         user_id,
-         chapter_index,
-         language,
-         paragraphs_json,
-         updated_at
-       )
-       VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  if (complete) {
+    const translatedParagraphs = [];
 
-       ON CONFLICT (
-         book_id,
-         user_id,
-         chapter_index,
-         language
-       )
-       DO UPDATE SET
-         paragraphs_json = excluded.paragraphs_json,
-         updated_at = CURRENT_TIMESTAMP`
-    ).bind(
-      book.id,
-      user.id,
-      body.chapter,
-      TARGET_LANGUAGE,
-      JSON.stringify(translatedParagraphs)
-    ).run();
+    for (let i = 0; i < total; i++) {
+      if (!savedParts.has(i)) {
+        return json({
+          error: "Falta un párrafo por recuperar.",
+          guardado: true
+        }, 500);
+      }
 
-  } catch (error) {
-    console.error(
-      "Error guardando traducción en D1:",
-      error
-    );
+      translatedParagraphs.push(savedParts.get(i));
+    }
+
+    // Guardar también la caché completa anterior.
+
+    try {
+      await saveCompleteTranslation(
+        env,
+        book,
+        user,
+        chapterIndex,
+        translatedParagraphs
+      );
+    } catch (error) {
+      console.error("Error guardando capítulo completo:", error);
+
+      return json({
+        error: "Los párrafos están guardados, pero no se pudo actualizar la caché completa.",
+        guardado: true
+      }, 500);
+    }
+
+    if (!batchMode) {
+      return json({
+        ok: true,
+        chapter: chapterIndex,
+        title: chapter.title,
+        paragraphs: translatedParagraphs,
+        language: TARGET_LANGUAGE,
+        cached: false,
+        guardado: true,
+        motores: stats
+      });
+    }
 
     return json({
-      error: "La traducción se realizó, pero no pudo guardarse en la base de datos.",
-      guardado: false
-    }, 500);
+      ok: true,
+      chapter: chapterIndex,
+      title: chapter.title,
+      complete: true,
+      cached: false,
+      language: TARGET_LANGUAGE,
+      total,
+      completed: total,
+      nextIndex: total,
+      progress: 100,
+      paragraphs: translatedParagraphs,
+      items,
+      motores: stats
+    });
   }
 
+  // ----------------------------------------
+  // 13. DEVOLVER AVANCE DEL BLOQUE
+  // ----------------------------------------
 
-  // ------------------------------------------
-  // 11. DEVOLVER CAPÍTULO TRADUCIDO
-  // ------------------------------------------
+  let nextIndex = 0;
+
+  while (
+    nextIndex < total &&
+    savedParts.has(nextIndex)
+  ) {
+    nextIndex++;
+  }
+
+  if (!batchMode) {
+    // Compatibilidad temporal con el frontend anterior.
+    // Devuelve el avance guardado en D1, aunque el capítulo
+    // todavía no esté completo.
+
+    return json({
+      ok: true,
+      chapter: chapterIndex,
+      title: chapter.title,
+      paragraphs: Array.from(
+        { length: total },
+        (_, i) => savedParts.get(i) ?? ""
+      ),
+      complete: false,
+      guardado: true,
+      total,
+      completed: savedParts.size,
+      nextIndex,
+      progress: Math.floor(
+        (savedParts.size / total) * 100
+      ),
+      motores: stats
+    });
+  }
 
   return json({
     ok: true,
-    chapter: body.chapter,
+    chapter: chapterIndex,
     title: chapter.title,
-    paragraphs: translatedParagraphs,
-    language: TARGET_LANGUAGE,
+    complete: false,
     cached: false,
-    guardado: true,
+    language: TARGET_LANGUAGE,
+    total,
+    completed: savedParts.size,
+    nextIndex,
+    progress: Math.floor(
+      (savedParts.size / total) * 100
+    ),
+    items,
     motores: stats
   });
-
 }
