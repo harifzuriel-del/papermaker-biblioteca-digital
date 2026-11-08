@@ -1,4 +1,3 @@
-
 import {
   json,
   currentUser,
@@ -347,8 +346,8 @@ async function saveCompleteTranslation(
        paragraphs_json,
        updated_at
      )
-     VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-     ON CONFLICT (
+     VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP
+          ON CONFLICT (
        book_id,
        user_id,
        chapter_index,
@@ -697,6 +696,26 @@ export async function onRequestPost({ request, env, params }) {
     }
   } catch (error) {
     console.error("Error durante la traducción:", error);
+          // este párrafo ya estará disponible en D1.
+
+      await saveTranslatedPart(
+        env,
+        book,
+        user,
+        chapterIndex,
+        index,
+        translated
+      );
+
+      savedParts.set(index, translated);
+
+      items.push({
+        index,
+        text: translated
+      });
+    }
+  } catch (error) {
+    console.error("Error durante la traducción:", error);
 
     return json({
       ok: false,
@@ -835,4 +854,215 @@ export async function onRequestPost({ request, env, params }) {
     items,
     motores: stats
   });
+}
+
+
+// ==========================================
+// CONSULTAR TRADUCCIÓN GUARDADA
+// GET /api/private-books/:id/translate?chapter=0
+// Esta ruta SOLO consulta D1.
+// No inicia traducciones ni consume motores.
+// ==========================================
+
+export async function onRequestGet({ request, env, params }) {
+  try {
+    // 1. Validar origen
+    if (!sameOrigin(request)) {
+      return json({
+        error: "Origen no permitido."
+      }, 403);
+    }
+
+    // 2. Validar sesión
+    const user = await currentUser(request, env);
+
+    if (!user) {
+      return json({
+        error: "Inicia sesión para consultar tus traducciones."
+      }, 401);
+    }
+
+    // 3. Validar capítulo solicitado
+    const url = new URL(request.url);
+    const chapterIndex = Number(url.searchParams.get("chapter"));
+
+    if (
+      !Number.isInteger(chapterIndex) ||
+      chapterIndex < 0
+    ) {
+      return json({
+        error: "El capítulo solicitado no es válido."
+      }, 400);
+    }
+
+    // 4. Buscar libro perteneciente al usuario
+    const book = await env.DB.prepare(
+      `SELECT id, language, content_json
+       FROM private_books
+       WHERE id = ? AND user_id = ?`
+    ).bind(params.id, user.id).first();
+
+    if (!book) {
+      return json({
+        error: "Libro privado no encontrado."
+      }, 404);
+    }
+
+    if (book.language !== SOURCE_LANGUAGE) {
+      return json({
+        error: "El libro no está en inglés."
+      }, 400);
+    }
+
+    // 5. Leer contenido del libro
+    let content;
+
+    try {
+      content = JSON.parse(book.content_json);
+    } catch {
+      return json({
+        error: "No se pudo leer el contenido del libro."
+      }, 500);
+    }
+
+    if (
+      !content ||
+      !Array.isArray(content.chapters) ||
+      chapterIndex >= content.chapters.length
+    ) {
+      return json({
+        error: "El capítulo solicitado no existe."
+      }, 404);
+    }
+
+    const chapter = content.chapters[chapterIndex];
+
+    if (
+      !chapter ||
+      !Array.isArray(chapter.paragraphs)
+    ) {
+      return json({
+        error: "El capítulo no contiene párrafos válidos."
+      }, 400);
+    }
+
+    const total = chapter.paragraphs.length;
+
+    // 6. Consultar primero la caché completa
+    const completeTranslation = await getCompleteTranslation(
+      env,
+      book,
+      user,
+      chapterIndex,
+      total
+    );
+
+    if (completeTranslation) {
+      return json({
+        ok: true,
+        complete: true,
+        cached: true,
+        chapter: chapterIndex,
+        title: chapter.title,
+        language: TARGET_LANGUAGE,
+        total,
+        completed: total,
+        nextIndex: total,
+        progress: 100,
+        paragraphs: completeTranslation
+      });
+    }
+
+    // 7. Si no hay caché completa, consultar párrafos guardados
+    const savedParts = await getSavedParts(
+      env,
+      book,
+      user,
+      chapterIndex,
+      total
+    );
+
+    // Si todos los párrafos están guardados, reconstruir
+    // la traducción completa desde la tabla de partes.
+    if (savedParts.size === total) {
+      const translatedParagraphs = [];
+
+      for (let i = 0; i < total; i++) {
+        if (!savedParts.has(i)) {
+          return json({
+            ok: false,
+            error: "La traducción todavía tiene párrafos pendientes."
+          }, 500);
+        }
+
+        translatedParagraphs.push(savedParts.get(i));
+      }
+
+      // Intentar actualizar la caché completa para futuras consultas.
+      try {
+        await saveCompleteTranslation(
+          env,
+          book,
+          user,
+          chapterIndex,
+          translatedParagraphs
+        );
+      } catch (error) {
+        // La traducción sigue siendo recuperable desde las partes.
+        console.error(
+          "No se pudo reconstruir la caché completa:",
+          error
+        );
+      }
+
+      return json({
+        ok: true,
+        complete: true,
+        cached: true,
+        chapter: chapterIndex,
+        title: chapter.title,
+        language: TARGET_LANGUAGE,
+        total,
+        completed: total,
+        nextIndex: total,
+        progress: 100,
+        paragraphs: translatedParagraphs
+      });
+    }
+
+    // 8. Si está incompleta, informar avance sin traducir nada.
+    let nextIndex = 0;
+
+    while (
+      nextIndex < total &&
+      savedParts.has(nextIndex)
+    ) {
+      nextIndex++;
+    }
+
+    return json({
+      ok: true,
+      complete: false,
+      cached: false,
+      chapter: chapterIndex,
+      title: chapter.title,
+      language: TARGET_LANGUAGE,
+      total,
+      completed: savedParts.size,
+      nextIndex,
+      progress: total
+        ? Math.floor((savedParts.size / total) * 100)
+        : 0
+    });
+
+  } catch (error) {
+    console.error(
+      "Error consultando traducción guardada:",
+      error
+    );
+
+    return json({
+      error: "No se pudo consultar la traducción guardada."
+    }, 500);
+  }
 }
