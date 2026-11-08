@@ -346,8 +346,8 @@ async function saveCompleteTranslation(
        paragraphs_json,
        updated_at
      )
-     VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP
-          ON CONFLICT (
+     VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT (
        book_id,
        user_id,
        chapter_index,
@@ -649,87 +649,65 @@ export async function onRequestPost({ request, env, params }) {
     }
   }
 
-  // ----------------------------------------
-  // 11. TRADUCIR Y GUARDAR CADA PÁRRAFO
-  // ----------------------------------------
+ // ----------------------------------------
+// 11. TRADUCIR Y GUARDAR CADA PÁRRAFO
+// ----------------------------------------
 
-  const stats = {
-    workersAI: 0,
-    libreTranslate: 0
-  };
+const stats = {
+  workersAI: 0,
+  libreTranslate: 0
+};
 
-  const items = [];
+const items = [];
 
-  try {
-    for (const index of indexes) {
-      const paragraph = paragraphs[index];
+try {
+  for (const index of indexes) {
+    const paragraph = paragraphs[index];
 
-      let translated = "";
+    let translated = "";
 
-      if (paragraph.trim()) {
-        translated = await translateParagraph(
-          paragraph,
-          env,
-          stats
-        );
-      }
-
-      // Guardado inmediato:
-      // si la petición se interrumpe después,
-      // este párrafo ya estará disponible en D1.
-
-      await saveTranslatedPart(
+    if (paragraph.trim()) {
+      translated = await translateParagraph(
+        paragraph,
         env,
-        book,
-        user,
-        chapterIndex,
-        index,
-        translated
+        stats
       );
-
-      savedParts.set(index, translated);
-
-      items.push({
-        index,
-        text: translated
-      });
     }
-  } catch (error) {
-    console.error("Error durante la traducción:", error);
-          // este párrafo ya estará disponible en D1.
 
-      await saveTranslatedPart(
-        env,
-        book,
-        user,
-        chapterIndex,
-        index,
-        translated
-      );
+    // Guardado inmediato en D1.
 
-      savedParts.set(index, translated);
+    await saveTranslatedPart(
+      env,
+      book,
+      user,
+      chapterIndex,
+      index,
+      translated
+    );
 
-      items.push({
-        index,
-        text: translated
-      });
-    }
-  } catch (error) {
-    console.error("Error durante la traducción:", error);
+    savedParts.set(index, translated);
 
-    return json({
-      ok: false,
-      error: error?.message ||
-        "No se pudo completar este bloque.",
-      guardado: true,
-      items,
-      completed: savedParts.size,
-      total,
-      progress: Math.floor(
-        (savedParts.size / total) * 100
-      )
-    }, 502);
+    items.push({
+      index,
+      text: translated
+    });
   }
+} catch (error) {
+  console.error("Error durante la traducción:", error);
+
+  return json({
+    ok: false,
+    error: error?.message ||
+      "No se pudo completar este bloque.",
+    guardado: true,
+    items,
+    completed: savedParts.size,
+    total,
+    progress: Math.floor(
+      (savedParts.size / total) * 100
+    )
+  }, 502);
+}
 
   // ----------------------------------------
   // 12. COMPROBAR SI TERMINÓ EL CAPÍTULO
