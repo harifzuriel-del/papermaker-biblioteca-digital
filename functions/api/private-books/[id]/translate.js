@@ -862,8 +862,15 @@ export async function onRequestGet({ request, env, params }) {
 
     // 3. Validar capítulo solicitado
     const url = new URL(request.url);
-    const chapterIndex = Number(url.searchParams.get("chapter"));
+    const chapterParam = url.searchParams.get("chapter");
 
+    if (chapterParam === null || chapterParam.trim() === "") {
+    return json({
+    error: "Debes indicar el capítulo solicitado."
+    }, 400);
+    }
+
+    const chapterIndex = Number(chapterParam);
     if (
       !Number.isInteger(chapterIndex) ||
       chapterIndex < 0
@@ -925,6 +932,21 @@ export async function onRequestGet({ request, env, params }) {
     }
 
     const total = chapter.paragraphs.length;
+        if (total === 0) {
+      return json({
+        error: "El capítulo no contiene texto para consultar."
+      }, 400);
+    }
+
+    if (
+      chapter.paragraphs.some(
+        paragraph => typeof paragraph !== "string"
+      )
+    ) {
+      return json({
+        error: "El capítulo contiene párrafos con formato no válido."
+      }, 400);
+    }
 
     // 6. Consultar primero la caché completa
     const completeTranslation = await getCompleteTranslation(
