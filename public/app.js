@@ -16,6 +16,7 @@ const state = {
   isRestoringProgress: false,
   translatedChapter: null,
   showingTranslation: false,
+  translationRequestId: 0,
   readerPages: [],
   readerPage: 0
 };
@@ -557,6 +558,7 @@ async function deletePrivateBook(id) {
       String(state.currentBook.id) === String(id)
     ) {
       clearTimeout(state.saveTimer);
+      state.translationRequestId++;
       stopSpeech();
 
       if ($("#readerDialog").open) {
@@ -724,6 +726,8 @@ async function submitAuth(event) {
 }
 
 async function logout() {
+  state.translationRequestId++;
+
   try {
     await api("/api/auth/logout", { method: "POST" });
   } catch {}
@@ -1221,6 +1225,7 @@ async function syncProgressFromServer(bookId) {
 
 async function openBook(id) {
   try {
+    state.translationRequestId++;
     const data = await api(
       `/api/books/${encodeURIComponent(id)}`
     );
@@ -1262,7 +1267,9 @@ async function openBook(id) {
 }
 
 async function openPrivateBook(id) {
-  try {
+    try {
+    state.translationRequestId++;
+
     const data = await api(
       `/api/private-books/${encodeURIComponent(id)}`
     );
@@ -1300,71 +1307,14 @@ async function openPrivateBook(id) {
         "Inicia sesión para guardar tu progreso.";
     }
 
-    // ==========================================
-    // RECUPERAR TRADUCCIÓN GUARDADA
-    // ==========================================
-
-    if (
-      state.user &&
-      canTranslateCurrentBook()
-    ) {
-      const bookId = String(state.currentBook.id);
-      const chapterIndex = state.chapter;
-
-      try {
-        const originalParagraphs =
-          state.content?.chapters?.[chapterIndex]?.paragraphs;
-
-        if (!Array.isArray(originalParagraphs)) {
-          return;
-        }
-
-        const result = await api(
-          `/api/private-books/${encodeURIComponent(bookId)}/translate?chapter=${chapterIndex}`
-        );
-
-        // Comprobar que el usuario sigue en el mismo libro y capítulo.
-        if (
-          String(state.currentBook?.id) !== bookId ||
-          state.chapter !== chapterIndex
-        ) {
-          return;
-        }
-
-        // Solo cargar si el servidor confirma que está completa.
-        if (
-          result?.complete === true &&
-          Array.isArray(result.paragraphs) &&
-          result.paragraphs.length === originalParagraphs.length
-        ) {
-          state.translatedChapter = {
-            bookId,
-            chapter: chapterIndex,
-            title:
-              result.title ||
-              state.content.chapters[chapterIndex].title,
-            paragraphs: result.paragraphs
-          };
-
-          state.showingTranslation = true;
-
-          renderChapter();
-        }
-
-      } catch (translationError) {
-        console.error(
-          "No se pudo recuperar la traducción guardada:",
-          translationError
-        );
-      }
-    }
-
-  } catch (error) {
+  // Recuperar traducción del capítulo restaurado.
+await loadSavedTranslationForCurrentChapter();
+    
+ } catch (error) {
     console.error("Error al abrir el libro privado:", error);
     toast(error.message);
   }
 }
-
 
 /* ========================================
    TRADUCCIÓN POR BLOQUES
@@ -1865,50 +1815,71 @@ window.addEventListener("resize", () => {
   });
 });
 
+/* ========================================
+   RECUPERAR TRADUCCIÓN GUARDADA
+======================================== */
 
-
-/* CAPÍTULOS */
-
-bindEvent("#chapterList", "click", event => {
-  const button = event.target.closest("[data-chapter]");
-
-  if (!button) return;
-
-  stopSpeech();
-
-  state.chapter = Number(button.dataset.chapter);
-  state.translatedChapter = null;
-  state.showingTranslation = false;
-
-  renderChapter();
-});
-
-bindEvent("#prevChapter", "click", () => {
-  if (state.chapter > 0) {
-    stopSpeech();
-
-    state.chapter--;
-    state.translatedChapter = null;
-    state.showingTranslation = false;
-
-    renderChapter();
+async function loadSavedTranslationForCurrentChapter() {
+  if (!canTranslateCurrentBook() || !state.user) {
+    return;
   }
-});
 
-bindEvent("#nextChapter", "click", () => {
-  if (
-    state.content &&
-    state.chapter < state.content.chapters.length - 1
-  ) {
+  const bookId = String(state.currentBook.id);
+  const chapterIndex = state.chapter;
+
+  // Identificador para descartar consultas antiguas.
+  const requestId = ++state.translationRequestId;
+
+  try {
+    const originalParagraphs =
+      state.content?.chapters?.[chapterIndex]?.paragraphs;
+
+    if (!Array.isArray(originalParagraphs)) {
+      return;
+    }
+
+    const result = await api(
+      `/api/private-books/${encodeURIComponent(bookId)}/translate?chapter=${chapterIndex}`
+    );
+
+    // Evitar aplicar una respuesta a otro capítulo o libro.
+    if (
+      requestId !== state.translationRequestId ||
+      String(state.currentBook?.id) !== bookId ||
+      state.chapter !== chapterIndex
+    ) {
+      return;
+    }
+
+    if (
+      result?.complete !== true ||
+      !Array.isArray(result.paragraphs) ||
+      result.paragraphs.length !== originalParagraphs.length
+    ) {
+      return;
+    }
+
+    state.translatedChapter = {
+      bookId,
+      chapter: chapterIndex,
+      title:
+        result.title ||
+        state.content.chapters[chapterIndex].title,
+      paragraphs: result.paragraphs
+    };
+
+    state.showingTranslation = true;
+
     stopSpeech();
-
-    state.chapter++;
-    state.translatedChapter = null;
-    state.showingTranslation = false;
-
     renderChapter();
+
+  } catch (error) {
+    console.error(
+      "Error al recuperar la traducción guardada:",
+      error
+    );
   }
-});
+}
 
 function getCurrentParagraphAnchor() {
   const anchors = state.readerPageAnchors || [];
@@ -1971,26 +1942,65 @@ bindEvent("#fontDown", "click", () => {
   }
 });
 
-bindEvent("#fontUp", "click", () => {
-  const paragraphAnchor = getCurrentParagraphAnchor();
+/* ========================================
+   NAVEGACIÓN ENTRE CAPÍTULOS
+======================================== */
 
-  state.fontSize = Math.min(28, state.fontSize + 1);
+bindEvent("#chapterList", "click", event => {
+  const button = event.target.closest("[data-chapter]");
 
-  const readerText = $("#readerText");
+  if (!button) return;
 
-  if (readerText) {
-    readerText.style.fontSize = `${state.fontSize}px`;
+  const chapterIndex = Number(button.dataset.chapter);
 
-    const paragraphs = state.showingTranslation
-      ? state.translatedChapter?.paragraphs
-      : state.content?.chapters?.[state.chapter]?.paragraphs;
+  if (
+    !Number.isInteger(chapterIndex) ||
+    chapterIndex < 0 ||
+    chapterIndex >= state.content.chapters.length ||
+    chapterIndex === state.chapter
+  ) {
+    return;
+  }
 
-    if (paragraphs) {
-      requestAnimationFrame(() => {
-        paginateReaderContent(paragraphs);
-        restoreParagraphAnchor(paragraphAnchor);
-      });
-    }
+  stopSpeech();
+
+  state.chapter = chapterIndex;
+  state.translatedChapter = null;
+  state.showingTranslation = false;
+
+  renderChapter();
+
+  loadSavedTranslationForCurrentChapter();
+});
+
+bindEvent("#prevChapter", "click", () => {
+  if (state.chapter > 0) {
+    stopSpeech();
+
+    state.chapter--;
+    state.translatedChapter = null;
+    state.showingTranslation = false;
+
+    renderChapter();
+
+    loadSavedTranslationForCurrentChapter();
+  }
+});
+
+bindEvent("#nextChapter", "click", () => {
+  if (
+    state.content &&
+    state.chapter < state.content.chapters.length - 1
+  ) {
+    stopSpeech();
+
+    state.chapter++;
+    state.translatedChapter = null;
+    state.showingTranslation = false;
+
+    renderChapter();
+
+    loadSavedTranslationForCurrentChapter();
   }
 });
 
