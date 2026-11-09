@@ -896,27 +896,60 @@ function restoreReadingPosition(position) {
 }
 
 
-function paginateReaderContent(paragraphs) {
+function paginateReaderContent(paragraphs, retry = 0) {
   const container = $("#readerText");
 
   if (!container) return;
 
   const perSpread = getPagesPerSpread();
+  const containerStyle = getComputedStyle(container);
 
-  const pageWidth = perSpread === 1
-    ? container.clientWidth
-    : (container.clientWidth - 18) / 2;
+  // ------------------------------------------
+  // MEDIR EL ESPACIO REAL DISPONIBLE
+  // ------------------------------------------
 
-  const pageHeight = container.clientHeight;
+  const paddingLeft =
+    parseFloat(containerStyle.paddingLeft) || 0;
 
-  if (!pageWidth || !pageHeight) {
-    requestAnimationFrame(() => {
-      paginateReaderContent(paragraphs);
-    });
+  const paddingRight =
+    parseFloat(containerStyle.paddingRight) || 0;
+
+  const paddingTop =
+    parseFloat(containerStyle.paddingTop) || 0;
+
+  const paddingBottom =
+    parseFloat(containerStyle.paddingBottom) || 0;
+
+  const columnGap =
+    parseFloat(containerStyle.columnGap) || 0;
+
+  const contentWidth =
+    container.clientWidth - paddingLeft - paddingRight;
+
+  const pageWidth =
+    (contentWidth - columnGap * (perSpread - 1)) / perSpread;
+
+  const pageHeight =
+    container.clientHeight - paddingTop - paddingBottom;
+
+  // Evitar intentos infinitos cuando el lector
+  // todavía no está visible o no tiene dimensiones.
+  if (pageWidth <= 0 || pageHeight <= 0) {
+    if (retry < 60) {
+      requestAnimationFrame(() => {
+        paginateReaderContent(paragraphs, retry + 1);
+      });
+    }
+
     return;
   }
 
+  // ------------------------------------------
+  // CREAR ELEMENTO DE MEDICIÓN
+  // ------------------------------------------
+
   const probe = document.createElement("article");
+
   probe.className = "reader-paper-page";
   probe.style.position = "absolute";
   probe.style.visibility = "hidden";
@@ -927,19 +960,45 @@ function paginateReaderContent(paragraphs) {
 
   document.body.appendChild(probe);
 
+  const probeStyle = getComputedStyle(probe);
+
+  const probePaddingBottom =
+    parseFloat(probeStyle.paddingBottom) || 0;
+
+  const probeBorderBottom =
+    parseFloat(probeStyle.borderBottomWidth) || 0;
+
+  // Comprueba si un párrafo cabe dentro de la página,
+  // incluyendo su margen inferior.
+  function paragraphFits(element) {
+    const pageRect = probe.getBoundingClientRect();
+    const paragraphRect = element.getBoundingClientRect();
+
+    const paragraphStyle = getComputedStyle(element);
+
+    const marginBottom =
+      parseFloat(paragraphStyle.marginBottom) || 0;
+
+    const contentBottom =
+      pageRect.bottom -
+      probeBorderBottom -
+      probePaddingBottom;
+
+    return (
+      paragraphRect.bottom + marginBottom <=
+      contentBottom + 1
+    );
+  }
+
+  // ------------------------------------------
+  // ESTADO DE PAGINACIÓN
+  // ------------------------------------------
+
   const pages = [];
   const pageAnchors = [];
 
   let currentPage = [];
-  let currentHeight = 0;
   let currentStartIndex = null;
-
-  const computed = getComputedStyle(probe);
-
-  const contentHeight =
-    pageHeight -
-    parseFloat(computed.paddingTop) -
-    parseFloat(computed.paddingBottom);
 
   function savePage() {
     if (!currentPage.length) return;
@@ -948,56 +1007,68 @@ function paginateReaderContent(paragraphs) {
     pageAnchors.push(currentStartIndex);
 
     currentPage = [];
-    currentHeight = 0;
     currentStartIndex = null;
 
     probe.innerHTML = "";
   }
 
+  // ------------------------------------------
+  // AGREGAR PÁRRAFOS
+  // ------------------------------------------
+
   function addParagraph(text, paragraphIndex) {
     const paragraph = document.createElement("p");
+
     paragraph.textContent = text;
     probe.appendChild(paragraph);
 
-    const height = paragraph.getBoundingClientRect().height;
-
-    if (currentHeight + height <= contentHeight) {
+    // El párrafo cabe en la página actual.
+    if (paragraphFits(paragraph)) {
       if (currentStartIndex === null) {
         currentStartIndex = paragraphIndex;
       }
 
       currentPage.push(`<p>${esc(text)}</p>`);
-      currentHeight += height;
       return;
     }
 
+    // No cabe: retirarlo para decidir qué hacer.
     probe.removeChild(paragraph);
 
+    // Si ya hay contenido, guardar la página
+    // e intentar nuevamente en una página vacía.
     if (currentPage.length) {
       savePage();
       addParagraph(text, paragraphIndex);
       return;
     }
 
-    /* Párrafo demasiado largo: dividir por palabras */
-    const words = text.split(/\s+/);
-    let remaining = words;
+    // ----------------------------------------
+    // DIVIDIR PÁRRAFOS DEMASIADO LARGOS
+    // ----------------------------------------
+
+    let remaining = text.split(/\s+/);
 
     while (remaining.length) {
       let low = 1;
       let high = remaining.length;
       let best = 1;
 
+      // Buscar la mayor cantidad de palabras
+      // que cabe en una página.
       while (low <= high) {
         const middle = Math.floor((low + high) / 2);
-        const part = remaining.slice(0, middle).join(" ");
+
+        const part = remaining
+          .slice(0, middle)
+          .join(" ");
 
         const test = document.createElement("p");
+
         test.textContent = part;
         probe.appendChild(test);
 
-        const fits =
-          test.getBoundingClientRect().height <= contentHeight;
+        const fits = paragraphFits(test);
 
         probe.removeChild(test);
 
@@ -1009,7 +1080,9 @@ function paginateReaderContent(paragraphs) {
         }
       }
 
-      const part = remaining.slice(0, best).join(" ");
+      const part = remaining
+        .slice(0, best)
+        .join(" ");
 
       if (currentStartIndex === null) {
         currentStartIndex = paragraphIndex;
@@ -1017,18 +1090,34 @@ function paginateReaderContent(paragraphs) {
 
       currentPage.push(`<p>${esc(part)}</p>`);
 
+      // Retirar las palabras ya utilizadas.
       remaining = remaining.slice(best);
 
+      // Si quedan palabras, guardar esta página.
+      // También evita ciclos cuando una sola palabra
+      // no cabe por completo.
       savePage();
     }
   }
 
-  paragraphs.forEach((paragraph, index) => {
-    addParagraph(String(paragraph), index);
-  });
+  // ------------------------------------------
+  // PROCESAR TODOS LOS PÁRRAFOS
+  // ------------------------------------------
 
+  (Array.isArray(paragraphs) ? paragraphs : [])
+    .forEach((paragraph, index) => {
+      addParagraph(String(paragraph), index);
+    });
+
+  // Guardar la última página.
   savePage();
+
+  // Retirar el elemento de medición.
   probe.remove();
+
+  // ------------------------------------------
+  // ACTUALIZAR ESTADO DEL LECTOR
+  // ------------------------------------------
 
   state.readerPages = pages.length ? pages : [""];
   state.readerPageAnchors = pageAnchors;
@@ -1038,6 +1127,7 @@ function paginateReaderContent(paragraphs) {
     state.readerPages.length - 1
   );
 
+  // Mostrar las páginas calculadas.
   displayReaderSpread();
 }
 
