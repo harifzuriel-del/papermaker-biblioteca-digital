@@ -2053,6 +2053,42 @@ button:disabled {
     max-height: calc(100dvh - 16px);
   }
 }
+/* ==========================================
+   CONTROLES DE PAGINACIÓN SIEMPRE VISIBLES
+========================================== */
 
+.reader-page-controls {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 13px 8px 7px;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.reader-page-controls button {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  min-height: 37px;
+  padding: 7px 14px;
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: background-color 0.2s ease,
+              transform 0.2s ease;
+}
+
+.reader-page-controls button:hover {
+  transform: translateY(-1px);
+}
+
+#readerPageStatus {
+  display: inline-block !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
 
 
