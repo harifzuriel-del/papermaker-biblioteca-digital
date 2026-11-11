@@ -986,9 +986,16 @@ function displayReaderSpread(direction = 0) {
 }
 
 
-function changeReaderPage(direction) {
-  const perSpread = getPagesPerSpread();
 
+function changeReaderPage(direction) {
+  const container = $("#readerText");
+
+  // Evitar varios giros simultáneos.
+  if (container?.dataset.pageTurning === "true") {
+    return;
+  }
+
+  const perSpread = getPagesPerSpread();
   const total = getReaderPageCount();
   const totalSpreads = Math.ceil(total / perSpread);
 
@@ -998,14 +1005,26 @@ function changeReaderPage(direction) {
 
   const nextSpread = Math.max(
     0,
-    Math.min(totalSpreads - 1, currentSpread + direction)
+    Math.min(
+      totalSpreads - 1,
+      currentSpread + direction
+    )
   );
+
+  // No avanzar más allá de los límites.
+  if (nextSpread === currentSpread) {
+    return;
+  }
 
   state.readerPage = nextSpread * perSpread;
 
-  displayReaderSpread();
+  // Enviar la dirección para ejecutar el giro.
+  displayReaderSpread(direction > 0 ? 1 : -1);
+
+  // Guardar el progreso normalmente.
   queueProgressSave();
 }
+
 
 function restoreReadingPosition(position) {
   const total = getReaderPageCount();
