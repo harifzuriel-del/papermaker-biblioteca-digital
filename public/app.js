@@ -779,10 +779,16 @@ function getReadingPosition() {
   return Math.max(0, Number(state.readerPage) || 0);
 }
 
+
 function ensureReaderPageControls() {
   const readerText = $("#readerText");
 
   if (!readerText || $("#readerPageControls")) return;
+
+  // Obtener el escenario completo del libro
+  const bookStage = readerText.closest(".reader-book-stage");
+
+  if (!bookStage) return;
 
   const controls = document.createElement("div");
   controls.id = "readerPageControls";
@@ -804,7 +810,8 @@ function ensureReaderPageControls() {
     </button>
   `;
 
-  readerText.insertAdjacentElement("afterend", controls);
+  // Insertar los controles fuera del libro
+  bookStage.insertAdjacentElement("afterend", controls);
 
   $("#readerPagePrev").addEventListener("click", () => {
     changeReaderPage(-1);
@@ -814,6 +821,7 @@ function ensureReaderPageControls() {
     changeReaderPage(1);
   });
 }
+
 
 function updateReaderPageControls() {
   const status = $("#readerPageStatus");
