@@ -847,9 +847,112 @@ function updateReaderPageControls() {
   next.disabled = state.readerPage + perSpread >= total;
 }
 
-function displayReaderSpread() {
+function animateReaderPageTurn(container, pageClone, pageRect, direction) {
+  if (!pageClone || !pageRect) return;
+
+  // Respetar la preferencia de movimiento reducido.
+  if (
+    window.matchMedia &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  ) {
+    return;
+  }
+
+  const containerRect = container.getBoundingClientRect();
+
+  const sheet = pageClone;
+
+  sheet.classList.add("reader-page-turn-sheet");
+  sheet.setAttribute("aria-hidden", "true");
+
+  // Evitar IDs duplicados en el documento.
+  sheet.removeAttribute("id");
+  sheet.querySelectorAll("[id]").forEach(element => {
+    element.removeAttribute("id");
+  });
+
+  // Desactivar cualquier control dentro de la copia.
+  sheet.querySelectorAll("button, a, input, select, textarea").forEach(element => {
+    element.setAttribute("tabindex", "-1");
+
+    if ("disabled" in element) {
+      element.disabled = true;
+    }
+  });
+
+  // Conservar exactamente la posición y dimensiones de la hoja anterior.
+  sheet.style.left = `${pageRect.left - containerRect.left}px`;
+  sheet.style.top = `${pageRect.top - containerRect.top}px`;
+  sheet.style.width = `${pageRect.width}px`;
+  sheet.style.height = `${pageRect.height}px`;
+
+  // Avanzar: gira desde el lomo hacia la izquierda.
+  // Retroceder: gira desde el lomo hacia la derecha.
+  sheet.style.transformOrigin =
+    direction > 0 ? "left center" : "right center";
+
+  sheet.classList.add(
+    direction > 0
+      ? "reader-page-turn-forward"
+      : "reader-page-turn-backward"
+  );
+
+  container.appendChild(sheet);
+  container.dataset.pageTurning = "true";
+
+  let finished = false;
+
+  function finishAnimation() {
+    if (finished) return;
+
+    finished = true;
+    sheet.remove();
+
+    if (!container.querySelector(".reader-page-turn-sheet")) {
+      delete container.dataset.pageTurning;
+    }
+  }
+
+  sheet.addEventListener("animationend", event => {
+    if (event.target === sheet) {
+      finishAnimation();
+    }
+  }, { once: true });
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      sheet.classList.add("is-animating");
+    });
+  });
+
+  // Protección por si el navegador no dispara animationend.
+  window.setTimeout(finishAnimation, 1000);
+}
+
+
+function displayReaderSpread(direction = 0) {
   const container = $("#readerText");
   if (!container) return;
+
+  let turnData = null;
+
+  // Guardar visualmente la hoja anterior antes de cambiar el contenido.
+  if (direction !== 0) {
+    const oldPages = Array.from(
+      container.querySelectorAll(".reader-paper-page:not(.reader-page-turn-sheet)")
+    );
+
+    const pageToTurn = direction > 0
+      ? oldPages[oldPages.length - 1]
+      : oldPages[0];
+
+    if (pageToTurn) {
+      turnData = {
+        page: pageToTurn.cloneNode(true),
+        rect: pageToTurn.getBoundingClientRect()
+      };
+    }
+  }
 
   const perSpread = getPagesPerSpread();
   const start = Math.floor(state.readerPage / perSpread) * perSpread;
@@ -859,6 +962,7 @@ function displayReaderSpread() {
     start + perSpread
   );
 
+  // Mostrar la nueva doble página.
   container.innerHTML = visiblePages.map((html, index) => `
     <article class="reader-paper-page">
       ${html}
@@ -869,7 +973,18 @@ function displayReaderSpread() {
   `).join("");
 
   updateReaderPageControls();
+
+  // Animar la copia de la hoja anterior sobre la nueva página.
+  if (turnData) {
+    animateReaderPageTurn(
+      container,
+      turnData.page,
+      turnData.rect,
+      direction
+    );
+  }
 }
+
 
 function changeReaderPage(direction) {
   const perSpread = getPagesPerSpread();
