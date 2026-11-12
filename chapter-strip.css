@@ -1,0 +1,54 @@
+
+/* ==========================================
+   PAPERMAKER - CINTA HORIZONTAL DE CAPÍTULOS
+========================================== */
+
+@media (max-width: 700px) {
+
+  #readerDialog .reader-layout {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  #readerDialog .chapter-sidebar {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: 0 0 auto !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  #readerDialog #chapterList {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    touch-action: pan-y !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  #readerDialog #chapterList .chapter-item {
+    display: flex !important;
+    flex: 0 0 44px !important;
+    width: 44px !important;
+    min-width: 44px !important;
+    max-width: 44px !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  #readerDialog .reader-page {
+    align-self: stretch !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+}
