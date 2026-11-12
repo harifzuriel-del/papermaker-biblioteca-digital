@@ -4510,49 +4510,63 @@ if (yearElement) {
     refreshUser()
   ]);
 })();
-     
+  
 /* ==========================================
-   PAPERMAKER - CINTA HORIZONTAL DE CAPÍTULOS
-   DESPLAZAMIENTO TÁCTIL
+   PAPERMAKER - CINTA HORIZONTAL FUNCIONAL
 ========================================== */
 
 @media (max-width: 700px) {
 
-  .chapter-sidebar {
+  /* El contenedor debe ocupar todo el ancho */
+  #readerDialog .reader-layout {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
     width: 100% !important;
-    max-width: 100% !important;
-    max-height: 115px !important;
-    overflow: hidden !important;
-    box-sizing: border-box;
   }
 
-  #chapterList {
+  /* El panel de capítulos no debe crecer con la lista */
+  #readerDialog .chapter-sidebar {
+    display: block !important;
+    align-self: stretch !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: 0 0 auto !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Cinta horizontal */
+  #readerDialog #chapterList {
     display: flex !important;
     flex-direction: row !important;
     flex-wrap: nowrap !important;
 
     width: 100% !important;
+    min-width: 0 !important;
     max-width: 100% !important;
-    height: 54px !important;
-    max-height: 54px !important;
+
+    height: 52px !important;
+    max-height: 52px !important;
 
     gap: 9px !important;
-    padding: 5px 4px !important;
+    padding: 5px !important;
     margin: 0 !important;
 
-    overflow-x: auto !important;
+    overflow-x: scroll !important;
     overflow-y: hidden !important;
 
-    box-sizing: border-box !important;
-
+    touch-action: pan-x !important;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-x: contain;
-    touch-action: pan-x;
-    scroll-snap-type: x proximity;
+
     scrollbar-width: thin;
+    scroll-snap-type: x proximity;
   }
 
-  #chapterList .chapter-item {
+  /* Cada número ocupa una posición fija */
+  #readerDialog #chapterList .chapter-item {
     display: flex !important;
     flex: 0 0 44px !important;
 
@@ -4560,8 +4574,8 @@ if (yearElement) {
     min-width: 44px !important;
     max-width: 44px !important;
 
-    height: 42px !important;
-    min-height: 42px !important;
+    height: 40px !important;
+    min-height: 40px !important;
 
     align-items: center !important;
     justify-content: center !important;
@@ -4569,14 +4583,19 @@ if (yearElement) {
     padding: 0 !important;
     margin: 0 !important;
 
-    text-align: center !important;
     white-space: nowrap !important;
-
     scroll-snap-align: center;
   }
 
-  #chapterList .chapter-item-number {
+  #readerDialog #chapterList .chapter-item-number {
     font-size: 15px;
     font-weight: 700;
   }
-}     
+
+  /* Mantener el área de lectura a ancho completo */
+  #readerDialog .reader-page {
+    align-self: stretch !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+}
