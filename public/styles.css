@@ -4025,12 +4025,15 @@ function renderChapter(positionToRestore = null) {
   ensureReaderPageControls();
 
   $("#chapterList").innerHTML = chapters.map((item, index) => `
-    <button
-      class="chapter-item ${index === state.chapter ? "active" : ""}"
-      data-chapter="${index}">
-      ${index + 1}. ${esc(item.title)}
-    </button>
-  `).join("");
+  <button
+    type="button"
+    class="chapter-item ${index === state.chapter ? "active" : ""}"
+    data-chapter="${index}"
+    title="${esc(item.title)}"
+    aria-label="Capítulo ${index + 1}: ${esc(item.title)}">
+    <span class="chapter-item-number">${index + 1}</span>
+  </button>
+`).join("");
 
   $("#prevChapter").disabled = state.chapter === 0;
 
