@@ -1939,6 +1939,98 @@ function bindEvent(selector, eventName, handler, options) {
   }
 }
 
+
+/* ==========================================
+   CINTA DE CAPÍTULOS - DESLIZAMIENTO TÁCTIL
+========================================== */
+
+function enableChapterStripDragging() {
+  const strip = $("#chapterList");
+
+  if (!strip || strip.dataset.dragEnabled === "true") {
+    return;
+  }
+
+  strip.dataset.dragEnabled = "true";
+
+  let startX = 0;
+  let startY = 0;
+  let startScrollLeft = 0;
+  let activePointer = null;
+  let dragging = false;
+  let suppressClick = false;
+
+  strip.addEventListener("pointerdown", event => {
+    if (event.pointerType === "mouse" && event.button !== 0) {
+      return;
+    }
+
+    activePointer = event.pointerId;
+    startX = event.clientX;
+    startY = event.clientY;
+    startScrollLeft = strip.scrollLeft;
+    dragging = false;
+
+    strip.classList.remove("is-dragging");
+
+    if (strip.setPointerCapture) {
+      strip.setPointerCapture(event.pointerId);
+    }
+  });
+
+  strip.addEventListener("pointermove", event => {
+    if (event.pointerId !== activePointer) return;
+
+    const deltaX = event.clientX - startX;
+    const deltaY = event.clientY - startY;
+
+    if (
+      !dragging &&
+      Math.abs(deltaX) > 7 &&
+      Math.abs(deltaX) > Math.abs(deltaY)
+    ) {
+      dragging = true;
+      strip.classList.add("is-dragging");
+    }
+
+    if (dragging) {
+      strip.scrollLeft = startScrollLeft - deltaX;
+
+      if (event.cancelable) {
+        event.preventDefault();
+      }
+    }
+  });
+
+  function finishDragging(event) {
+    if (event.pointerId !== activePointer) return;
+
+    if (dragging) {
+      suppressClick = true;
+
+      window.setTimeout(() => {
+        suppressClick = false;
+      }, 400);
+    }
+
+    activePointer = null;
+    dragging = false;
+    strip.classList.remove("is-dragging");
+  }
+
+  strip.addEventListener("pointerup", finishDragging);
+  strip.addEventListener("pointercancel", finishDragging);
+
+  strip.addEventListener("click", event => {
+    if (suppressClick) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      suppressClick = false;
+    }
+  }, true);
+}
+
+
 /* CATÁLOGO */
 
 bindEvent("#searchInput", "input", renderBooks);
@@ -2273,6 +2365,8 @@ if (yearElement) {
 /* ========================================
    INICIALIZACIÓN
 ======================================== */
+
+enableChapterStripDragging();
 
 (async function init() {
   await Promise.all([
