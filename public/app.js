@@ -1820,6 +1820,19 @@ function toggleChapterTranslation() {
 
   state.showingTranslation = !state.showingTranslation;
 
+$("#chapterList").innerHTML = chapters.map((item, index) => `
+  <button
+    class="chapter-item ${index === state.chapter ? "active" : ""}"
+    data-chapter="${index}"
+    title="${esc(item.title)}">
+
+    <span class="chapter-number">${index + 1}</span>
+
+    <span class="chapter-name">${esc(item.title)}</span>
+
+  </button>
+`).join("");
+      
   renderChapter();
 }
 
@@ -1860,12 +1873,19 @@ function renderChapter(positionToRestore = null) {
   ensureReaderPageControls();
 
   $("#chapterList").innerHTML = chapters.map((item, index) => `
-    <button
-      class="chapter-item ${index === state.chapter ? "active" : ""}"
-      data-chapter="${index}">
-      ${index + 1}. ${esc(item.title)}
-    </button>
-  `).join("");
+  <button
+    class="chapter-item ${index === state.chapter ? "active" : ""}"
+    data-chapter="${index}"
+    title="${esc(item.title)}">
+
+    <span class="chapter-number">${index + 1}</span>
+
+    <span class="chapter-name">${esc(item.title)}</span>
+
+  </button>
+`).join("");
+  
+
 
   $("#prevChapter").disabled = state.chapter === 0;
 
@@ -2436,3 +2456,36 @@ enableChapterStripDragging();
     refreshUser()
   ]);
 })();
+
+
+/* ==========================================
+   CAPÍTULOS COMPACTOS EN CELULAR
+========================================== */
+
+@media (max-width: 700px) {
+
+  #readerDialog #chapterList .chapter-item {
+    flex: 0 0 44px !important;
+    width: 44px !important;
+    min-width: 44px !important;
+    max-width: 44px !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    white-space: nowrap !important;
+  }
+
+  #readerDialog #chapterList .chapter-name {
+    display: none !important;
+  }
+
+  #readerDialog #chapterList .chapter-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+      }
+
