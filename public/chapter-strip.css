@@ -44,21 +44,6 @@
     max-width: 44px !important;
     align-items: center !important;
     justify-content: center !important;
-  }
-
-  #readerDialog .reader-page {
-    align-self: stretch !important;
-    width: 100% !important;
-    min-width: 0 !important;
-  }
-
-   @media (max-width: 700px) {
-
-  #readerDialog #chapterList .chapter-item {
-    flex: 0 0 44px !important;
-    width: 44px !important;
-    min-width: 44px !important;
-    max-width: 44px !important;
     padding: 0 !important;
     overflow: hidden !important;
     white-space: nowrap !important;
@@ -69,14 +54,18 @@
   }
 
   #readerDialog #chapterList .chapter-number {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    font-size: 15px;
-    font-weight: 700;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    font-size: 15px !important;
+    font-weight: 700 !important;
   }
 
-   }
-}
+  #readerDialog .reader-page {
+    align-self: stretch !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
 
+}
