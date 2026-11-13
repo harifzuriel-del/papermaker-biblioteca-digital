@@ -252,7 +252,7 @@ function splitTextIntoChapters(text) {
   let paragraphs = [];
 
   const numberedHeading =
-    /^\s*(?:(?:cap[ií]tulo|chapter)\s+(?:n[úu]mero\s+)?[\divxlcdm]+|(?:parte|part|secci[oó]n|section|libro|book)\s+(?:[\divxlcdm]+|[a-z]))(?:\s*[:.\-–—]\s*|\s+)?(.*)$/i;
+    /^\s*(?:(?:cap[ií]tulo|chapter)\s+(?:(?:n[úu]mero|no\.?)\s*)?[\divxlcdm]+|(?:parte|part|secci[oó]n|section|libro|book)\s+(?:[\divxlcdm]+|[a-z]+))(?:\s*[:.\-–—]\s*|\s+)?(.*)$/i;
 
   const namedHeading =
     /^\s*(pr[oó]logo|prefacio|introducci[oó]n|ep[ií]logo|conclusi[oó]n|agradecimientos|bibliograf[ií]a|ap[eé]ndice|dedicatoria|foreword|preface|introduction|epilogue|afterword|acknowledgments|acknowledgements|bibliography|appendix|dedication)\s*[:.]?\s*$/i;
