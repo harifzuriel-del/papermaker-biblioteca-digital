@@ -257,8 +257,7 @@ function splitTextIntoChapters(text) {
   // Se excluyen deliberadamente "libro" y "book":
   // pueden aparecer al inicio de párrafos normales.
   const numberedHeading =
-    /^\s*(?:(?:cap[ií]tulo|chapter)\s+(?:(?:n[úu]mero|no\.?)\s*)?(?:\d+|[ivxlcdm]+)|(?:parte|part|secci[oó]n|section)\s+(?:\d+|[ivxlcdm]+|[a-z]+))(?:\s*[:.\-–—]\s*|\s+.*)?\s*$/i;
-
+  /^\s*(?:(?:cap[ií]tulo|chapter)\s+(?:n[úu]mero\s+|no\.?\s*)?(?:\d+|[ivxlcdm]+)|(?:parte|part|secci[oó]n|section)\s+(?:\d+|[ivxlcdm]+|one|two|three|four|five|six|seven|eight|nine|ten|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez))(?:\s*[:.\-–—]\s*|\s+.*)?\s*$/i;
   // Secciones editoriales.
   const namedHeading =
     /^\s*(pr[oó]logo|prefacio|introducci[oó]n|ep[ií]logo|conclusi[oó]n|agradecimientos|bibliograf[ií]a|ap[eé]ndice|dedicatoria|foreword|preface|introduction|epilogue|afterword|acknowledgments|acknowledgements|bibliography|appendix|dedication)\s*[:.]?\s*$/i;
