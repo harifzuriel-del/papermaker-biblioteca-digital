@@ -360,11 +360,196 @@ function splitTextIntoChapters(text) {
 
   saveChapter();
 
+
+function splitTextIntoChapters(text) {
+  const normalized = String(text || "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/\u0000/g, "")
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .trim();
+
+  if (!normalized) {
+    throw new Error("El archivo no contiene texto legible.");
+  }
+
+  const lines = normalized.split("\n");
+  const chapters = [];
+
+  let currentTitle = "Texto inicial";
+  let paragraphs = [];
+  let inContents = false;
+
+  // Reconocer capítulos y secciones numeradas.
+  // Se excluyen deliberadamente "libro" y "book":
+  // pueden aparecer al inicio de párrafos normales.
+  const numberedHeading =
+    /^\s*(?:(?:cap[ií]tulo|chapter)\s+(?:(?:n[úu]mero|no\.?)\s*)?(?:\d+|[ivxlcdm]+)|(?:parte|part|secci[oó]n|section)\s+(?:\d+|[ivxlcdm]+|[a-z]+))(?:\s*[:.\-–—]\s*|\s+.*)?\s*$/i;
+
+  // Secciones editoriales.
+  const namedHeading =
+    /^\s*(pr[oó]logo|prefacio|introducci[oó]n|ep[ií]logo|conclusi[oó]n|agradecimientos|bibliograf[ií]a|ap[eé]ndice|dedicatoria|foreword|preface|introduction|epilogue|afterword|acknowledgments|acknowledgements|bibliography|appendix|dedication)\s*[:.]?\s*$/i;
+
+  // Encabezados de índices.
+  const contentsHeader =
+    /^\s*(?:índice|indice|tabla de contenido|contenido|contents|table of contents)\s*:?\s*$/i;
+
+  // Líneas típicas de índices con puntos o número de página.
+  const contentsEntry =
+    /(?:\.{2,}|…+|\s{2,}\d+\s*$)/;
+
+  // Evitar confundir números de página con capítulos.
+  const pageOnly =
+    /^\s*(?:p[aá]gina\s*)?\d{1,4}\s*$/i;
+
+  function cleanParagraphs(sourceLines) {
+    const result = [];
+    let buffer = [];
+
+    function flush() {
+      const paragraph = buffer
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (paragraph) {
+        result.push(paragraph);
+      }
+
+      buffer = [];
+    }
+
+    for (const rawLine of sourceLines) {
+      const line = rawLine.replace(/\s+/g, " ").trim();
+
+      if (!line) {
+        flush();
+        continue;
+      }
+
+      if (pageOnly.test(line)) {
+        flush();
+        continue;
+      }
+
+      buffer.push(line);
+    }
+
+    flush();
+
+    return result;
+  }
+
+  function normalizeTitle(title) {
+    return String(title || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  }
+
+  function saveChapter() {
+    const cleaned = cleanParagraphs(paragraphs);
+
+    if (cleaned.length) {
+      chapters.push({
+        title: currentTitle,
+        paragraphs: cleaned
+      });
+    }
+
+    paragraphs = [];
+  }
+
+  function isHeading(line) {
+    if (line.length > 140) return false;
+
+    const numbered = numberedHeading.test(line);
+    const named = namedHeading.test(line);
+
+    return numbered || named;
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+
+    if (!line) {
+      if (!inContents) {
+        paragraphs.push("");
+      }
+      continue;
+    }
+
+    // Detectar el comienzo del índice.
+    if (contentsHeader.test(line)) {
+      saveChapter();
+      inContents = true;
+      continue;
+    }
+
+    // Ignorar las líneas del índice.
+    if (inContents) {
+      if (contentsEntry.test(line) || pageOnly.test(line)) {
+        continue;
+      }
+
+      // Buscar el comienzo del contenido real.
+      if (isHeading(line)) {
+        inContents = false;
+      } else {
+        // El índice terminó y comienza el texto.
+        inContents = false;
+      }
+    }
+
+    // Ignorar números de página aislados.
+    if (pageOnly.test(line)) {
+      continue;
+    }
+
+    const isNumbered = numberedHeading.test(line);
+    const isNamed = namedHeading.test(line);
+
+    if (
+      (isNumbered || isNamed) &&
+      line.length <= 140
+    ) {
+      const newTitle = isNamed
+        ? line.replace(/[:.]$/, "").trim()
+        : line.trim();
+
+      const sameTitle =
+        normalizeTitle(newTitle) ===
+        normalizeTitle(currentTitle);
+
+      // Evitar títulos duplicados consecutivos
+      // cuando todavía no hay contenido entre ellos.
+      if (sameTitle && paragraphs.length === 0) {
+        continue;
+      }
+
+      saveChapter();
+
+      currentTitle = newTitle;
+      continue;
+    }
+
+    // El resto pertenece al contenido del capítulo.
+    paragraphs.push(line);
+  }
+
+  saveChapter();
+
+  // Si no se encontraron encabezados,
+  // conservar el libro como una sola sección.
   if (!chapters.length) {
     const cleaned = cleanParagraphs(lines);
 
     if (!cleaned.length) {
-      throw new Error("No se pudo extraer texto legible del PDF.");
+      throw new Error(
+        "No se pudo extraer texto legible del PDF."
+      );
     }
 
     chapters.push({
@@ -374,7 +559,9 @@ function splitTextIntoChapters(text) {
   }
 
   if (chapters.length > 1000) {
-    throw new Error("El archivo contiene más de 1,000 secciones.");
+    throw new Error(
+      "El archivo contiene más de 1,000 secciones."
+    );
   }
 
   const total = chapters.reduce(
@@ -387,11 +574,14 @@ function splitTextIntoChapters(text) {
   );
 
   if (total > 1000000) {
-    throw new Error("El libro supera el límite de un millón de caracteres.");
+    throw new Error(
+      "El libro supera el límite de un millón de caracteres."
+    );
   }
 
   return { chapters };
 }
+
 
 /* ========================================
    IMPORTAR TXT Y PDF
