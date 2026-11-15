@@ -2449,7 +2449,7 @@ if (yearElement) {
    INICIALIZACIÓN
 ======================================== */
 
-enableChapterStripDragging();
+// enableChapterStripDragging();
 
 (async function init() {
   await Promise.all([
