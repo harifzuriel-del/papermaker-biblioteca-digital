@@ -2421,11 +2421,21 @@ bindEvent("#toggleStudyPanel", "click", () => {
 
   if (!tools || !button) return;
 
-  const isExpanded = !tools.hidden;
+  const isExpanded = button.getAttribute("aria-expanded") === "true";
 
-  tools.hidden = isExpanded;
-  button.setAttribute("aria-expanded", String(!isExpanded));
-  button.textContent = isExpanded ? "Mostrar" : "Ocultar";
+  if (isExpanded) {
+    tools.hidden = true;
+    tools.style.setProperty("display", "none", "important");
+
+    button.setAttribute("aria-expanded", "false");
+    button.textContent = "Mostrar";
+  } else {
+    tools.hidden = false;
+    tools.style.removeProperty("display");
+
+    button.setAttribute("aria-expanded", "true");
+    button.textContent = "Ocultar";
+  }
 });
 
 /* TEMA Y NARRACIÓN */
