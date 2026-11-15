@@ -2055,9 +2055,6 @@ function enableChapterStripDragging() {
 
     strip.classList.remove("is-dragging");
 
-    if (strip.setPointerCapture) {
-      strip.setPointerCapture(event.pointerId);
-    }
   });
 
   strip.addEventListener("pointermove", event => {
@@ -2073,6 +2070,10 @@ function enableChapterStripDragging() {
     ) {
       dragging = true;
       strip.classList.add("is-dragging");
+
+      if (strip.setPointerCapture) {
+        strip.setPointerCapture(event.pointerId);
+      }
     }
 
     if (dragging) {
