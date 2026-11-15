@@ -2411,7 +2411,22 @@ bindEvent("#nextChapter", "click", () => {
   }
 });
 
+/* ========================================
+   HERRAMIENTAS DE LECTURA: OCULTAR / MOSTRAR
+======================================== */
 
+bindEvent("#toggleStudyPanel", "click", () => {
+  const tools = $("#studyTools");
+  const button = $("#toggleStudyPanel");
+
+  if (!tools || !button) return;
+
+  const isExpanded = !tools.hidden;
+
+  tools.hidden = isExpanded;
+  button.setAttribute("aria-expanded", String(!isExpanded));
+  button.textContent = isExpanded ? "Mostrar" : "Ocultar";
+});
 
 /* TEMA Y NARRACIÓN */
 
