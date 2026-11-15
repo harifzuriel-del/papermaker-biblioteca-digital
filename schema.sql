@@ -93,3 +93,125 @@ CREATE TABLE IF NOT EXISTS private_reading_progress (
 
 CREATE INDEX IF NOT EXISTS idx_private_progress_user
 ON private_reading_progress(user_id);
+
+
+-- =========================================
+-- ANOTACIONES DE LIBROS PUBLICOS
+-- =========================================
+
+CREATE TABLE IF NOT EXISTS reading_annotations (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  book_id TEXT NOT NULL,
+
+  type TEXT NOT NULL
+    CHECK (type IN ('highlight', 'note', 'bookmark')),
+
+  chapter INTEGER NOT NULL CHECK (chapter >= 0),
+  paragraph_index INTEGER NOT NULL CHECK (paragraph_index >= 0),
+
+  start_offset INTEGER NOT NULL DEFAULT 0
+    CHECK (start_offset >= 0),
+
+  end_offset INTEGER,
+
+  selected_text TEXT,
+  color TEXT,
+  note TEXT,
+  page_number INTEGER,
+
+  created_at TEXT NOT NULL
+    DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+
+  updated_at TEXT NOT NULL
+    DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+
+  FOREIGN KEY (user_id)
+    REFERENCES users(id) ON DELETE CASCADE,
+
+  FOREIGN KEY (book_id)
+    REFERENCES books(id) ON DELETE CASCADE,
+
+  CHECK (
+    (type = 'highlight'
+      AND end_offset IS NOT NULL
+      AND end_offset > start_offset
+      AND selected_text IS NOT NULL
+      AND color IN ('#ffe66d', '#a8e6a3', '#9ed8ff', '#ffb6cf', '#d8b8ff'))
+    OR
+    (type = 'note'
+      AND end_offset IS NOT NULL
+      AND end_offset > start_offset
+      AND selected_text IS NOT NULL
+      AND note IS NOT NULL
+      AND length(trim(note)) > 0)
+    OR
+    (type = 'bookmark'
+      AND page_number IS NOT NULL
+      AND page_number >= 1)
+  )
+);
+
+CREATE INDEX IF NOT EXISTS idx_reading_annotations_user_book
+ON reading_annotations(user_id, book_id, chapter);
+
+
+-- =========================================
+-- ANOTACIONES DE LIBROS PRIVADOS
+-- =========================================
+
+CREATE TABLE IF NOT EXISTS private_reading_annotations (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  book_id TEXT NOT NULL,
+
+  type TEXT NOT NULL
+    CHECK (type IN ('highlight', 'note', 'bookmark')),
+
+  chapter INTEGER NOT NULL CHECK (chapter >= 0),
+  paragraph_index INTEGER NOT NULL CHECK (paragraph_index >= 0),
+
+  start_offset INTEGER NOT NULL DEFAULT 0
+    CHECK (start_offset >= 0),
+
+  end_offset INTEGER,
+
+  selected_text TEXT,
+  color TEXT,
+  note TEXT,
+  page_number INTEGER,
+
+  created_at TEXT NOT NULL
+    DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+
+  updated_at TEXT NOT NULL
+    DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+
+  FOREIGN KEY (user_id)
+    REFERENCES users(id) ON DELETE CASCADE,
+
+  FOREIGN KEY (book_id, user_id)
+    REFERENCES private_books(id, user_id) ON DELETE CASCADE,
+
+  CHECK (
+    (type = 'highlight'
+      AND end_offset IS NOT NULL
+      AND end_offset > start_offset
+      AND selected_text IS NOT NULL
+      AND color IN ('#ffe66d', '#a8e6a3', '#9ed8ff', '#ffb6cf', '#d8b8ff'))
+    OR
+    (type = 'note'
+      AND end_offset IS NOT NULL
+      AND end_offset > start_offset
+      AND selected_text IS NOT NULL
+      AND note IS NOT NULL
+      AND length(trim(note)) > 0)
+    OR
+    (type = 'bookmark'
+      AND page_number IS NOT NULL
+      AND page_number >= 1)
+  )
+);
+
+CREATE INDEX IF NOT EXISTS idx_private_annotations_user_book
+ON private_reading_annotations(user_id, book_id, chapter);
