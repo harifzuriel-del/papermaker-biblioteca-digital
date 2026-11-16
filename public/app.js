@@ -1100,6 +1100,7 @@ function restoreReadingPosition(position) {
 }
 
 
+
 function paginateReaderContent(paragraphs, retry = 0) {
   const container = $("#readerText");
 
@@ -1136,8 +1137,6 @@ function paginateReaderContent(paragraphs, retry = 0) {
   const pageHeight =
     container.clientHeight - paddingTop - paddingBottom;
 
-  // Evitar intentos infinitos cuando el lector
-  // todavía no está visible o no tiene dimensiones.
   if (pageWidth <= 0 || pageHeight <= 0) {
     if (retry < 60) {
       requestAnimationFrame(() => {
@@ -1172,8 +1171,6 @@ function paginateReaderContent(paragraphs, retry = 0) {
   const probeBorderBottom =
     parseFloat(probeStyle.borderBottomWidth) || 0;
 
-  // Comprueba si un párrafo cabe dentro de la página,
-  // incluyendo su margen inferior.
   function paragraphFits(element) {
     const pageRect = probe.getBoundingClientRect();
     const paragraphRect = element.getBoundingClientRect();
@@ -1200,8 +1197,10 @@ function paginateReaderContent(paragraphs, retry = 0) {
 
   const pages = [];
   const pageAnchors = [];
+  const pageFragments = [];
 
   let currentPage = [];
+  let currentFragments = [];
   let currentStartIndex = null;
 
   function savePage() {
@@ -1210,7 +1209,10 @@ function paginateReaderContent(paragraphs, retry = 0) {
     pages.push(currentPage.join(""));
     pageAnchors.push(currentStartIndex);
 
+    pageFragments.push(currentFragments);
+
     currentPage = [];
+    currentFragments = [];
     currentStartIndex = null;
 
     probe.innerHTML = "";
@@ -1226,17 +1228,24 @@ function paginateReaderContent(paragraphs, retry = 0) {
     paragraph.textContent = text;
     probe.appendChild(paragraph);
 
-    // El párrafo cabe en la página actual.
+    // El párrafo cabe completo.
     if (paragraphFits(paragraph)) {
       if (currentStartIndex === null) {
         currentStartIndex = paragraphIndex;
       }
 
       currentPage.push(`<p>${esc(text)}</p>`);
+
+      currentFragments.push({
+        paragraphIndex,
+        startOffset: 0,
+        endOffset: text.length,
+        text
+      });
+
       return;
     }
 
-    // No cabe: retirarlo para decidir qué hacer.
     probe.removeChild(paragraph);
 
     // Si ya hay contenido, guardar la página
@@ -1249,23 +1258,51 @@ function paginateReaderContent(paragraphs, retry = 0) {
 
     // ----------------------------------------
     // DIVIDIR PÁRRAFOS DEMASIADO LARGOS
+    // CONSERVANDO LOS ÍNDICES ORIGINALES
     // ----------------------------------------
 
-    let remaining = text.split(/\s+/);
+    const words = [...text.matchAll(/\S+/g)];
 
-    while (remaining.length) {
-      let low = 1;
-      let high = remaining.length;
-      let best = 1;
+    // Caso especial: párrafo sin palabras.
+    if (!words.length) {
+      currentStartIndex = paragraphIndex;
+
+      currentPage.push(`<p>${esc(text)}</p>`);
+
+      currentFragments.push({
+        paragraphIndex,
+        startOffset: 0,
+        endOffset: text.length,
+        text
+      });
+
+      savePage();
+      return;
+    }
+
+    let wordPosition = 0;
+
+    while (wordPosition < words.length) {
+      let low = wordPosition + 1;
+      let high = words.length;
+      let best = wordPosition + 1;
 
       // Buscar la mayor cantidad de palabras
-      // que cabe en una página.
+      // que cabe en la página.
       while (low <= high) {
         const middle = Math.floor((low + high) / 2);
 
-        const part = remaining
-          .slice(0, middle)
-          .join(" ");
+        const startOffset = words[wordPosition].index;
+
+        const lastWord = words[middle - 1];
+
+        const endOffset =
+          lastWord.index + lastWord[0].length;
+
+        const part = text.slice(
+          startOffset,
+          endOffset
+        );
 
         const test = document.createElement("p");
 
@@ -1284,9 +1321,17 @@ function paginateReaderContent(paragraphs, retry = 0) {
         }
       }
 
-      const part = remaining
-        .slice(0, best)
-        .join(" ");
+      const startOffset = words[wordPosition].index;
+
+      const lastWord = words[best - 1];
+
+      const endOffset =
+        lastWord.index + lastWord[0].length;
+
+      const part = text.slice(
+        startOffset,
+        endOffset
+      );
 
       if (currentStartIndex === null) {
         currentStartIndex = paragraphIndex;
@@ -1294,12 +1339,16 @@ function paginateReaderContent(paragraphs, retry = 0) {
 
       currentPage.push(`<p>${esc(part)}</p>`);
 
-      // Retirar las palabras ya utilizadas.
-      remaining = remaining.slice(best);
+      currentFragments.push({
+        paragraphIndex,
+        startOffset,
+        endOffset,
+        text: part
+      });
 
-      // Si quedan palabras, guardar esta página.
-      // También evita ciclos cuando una sola palabra
-      // no cabe por completo.
+      wordPosition = best;
+
+      // Guardar cada fragmento en su página.
       savePage();
     }
   }
@@ -1325,6 +1374,10 @@ function paginateReaderContent(paragraphs, retry = 0) {
 
   state.readerPages = pages.length ? pages : [""];
   state.readerPageAnchors = pageAnchors;
+
+  // NUEVO: conservar la ubicación exacta
+  // de cada fragmento dentro de su párrafo.
+  state.readerPageFragments = pageFragments;
 
   state.readerPage = Math.min(
     state.readerPage,
