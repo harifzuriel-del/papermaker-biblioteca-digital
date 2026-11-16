@@ -1024,15 +1024,32 @@ function displayReaderSpread(direction = 0) {
     start + perSpread
   );
 
+  
   // Mostrar la nueva doble página.
-  container.innerHTML = visiblePages.map((html, index) => `
-    <article class="reader-paper-page">
-      ${html}
-      <span class="reader-paper-page-number">
-        ${start + index + 1}
-      </span>
-    </article>
-  `).join("");
+  container.innerHTML = visiblePages.map((html, index) => {
+    const pageIndex = start + index;
+    const fragments = state.readerPageFragments?.[pageIndex] || [];
+
+    const pageContent = fragments.length
+      ? fragments.map(fragment => `
+          <p
+            data-paragraph-index="${fragment.paragraphIndex}"
+            data-start-offset="${fragment.startOffset}"
+            data-end-offset="${fragment.endOffset}"
+          >${esc(fragment.text)}</p>
+        `).join("")
+      : html;
+
+    return `
+      <article class="reader-paper-page">
+        ${pageContent}
+        <span class="reader-paper-page-number">
+          ${pageIndex + 1}
+        </span>
+      </article>
+    `;
+  }).join("");
+
 
   updateReaderPageControls();
 
