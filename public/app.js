@@ -1038,6 +1038,100 @@ function displayReaderSpread(direction = 0) {
             data-end-offset="${fragment.endOffset}"
           >${esc(fragment.text)}</p>
         `).join("")
+
+function displayReaderSpread(direction = 0) {
+  const container = $("#readerText");
+  if (!container) return;
+
+  let turnData = null;
+
+  // Guardar visualmente la hoja anterior antes de cambiar el contenido.
+  if (direction !== 0) {
+    const oldPages = Array.from(
+      container.querySelectorAll(".reader-paper-page:not(.reader-page-turn-sheet)")
+    );
+
+    const pageToTurn = direction > 0
+      ? oldPages[oldPages.length - 1]
+      : oldPages[0];
+
+    if (pageToTurn) {
+      turnData = {
+        page: pageToTurn.cloneNode(true),
+        rect: pageToTurn.getBoundingClientRect()
+      };
+    }
+  }
+
+  const perSpread = getPagesPerSpread();
+  const start = Math.floor(state.readerPage / perSpread) * perSpread;
+
+  const visiblePages = state.readerPages.slice(
+    start,
+    start + perSpread
+  );
+
+  // Selección que se debe mostrar resaltada.
+  const selection = state.studySelection;
+
+  // Mostrar las páginas y sus posibles resaltados.
+  container.innerHTML = visiblePages.map((html, index) => {
+    const pageIndex = start + index;
+    const fragments = state.readerPageFragments?.[pageIndex] || [];
+
+    const pageContent = fragments.length
+      ? fragments.map(fragment => {
+          const text = String(fragment.text || "");
+          const fragmentStart = Number(fragment.startOffset) || 0;
+          const fragmentEnd = Number(fragment.endOffset);
+
+          const sameSelection =
+            selection &&
+            !state.showingTranslation &&
+            String(selection.bookId) === String(state.currentBook?.id || "") &&
+            Number(selection.chapter) === Number(state.chapter) &&
+            Number(selection.paragraphIndex) === Number(fragment.paragraphIndex);
+
+          let renderedText = esc(text);
+
+          if (sameSelection) {
+            const overlapStart = Math.max(
+              Number(selection.startOffset),
+              fragmentStart
+            );
+
+            const overlapEnd = Math.min(
+              Number(selection.endOffset),
+              Number.isFinite(fragmentEnd)
+                ? fragmentEnd
+                : fragmentStart + text.length
+            );
+
+            if (overlapEnd > overlapStart) {
+              const localStart = overlapStart - fragmentStart;
+              const localEnd = overlapEnd - fragmentStart;
+
+              const color = /^#[0-9a-f]{6}$/i.test(state.studySelectionColor)
+                ? state.studySelectionColor
+                : "#ffe66d";
+
+              renderedText =
+                esc(text.slice(0, localStart)) +
+                `<mark style="background-color:${color}; text-decoration:underline 2px ${color}; text-underline-offset:2px; border-radius:2px;">` +
+                esc(text.slice(localStart, localEnd)) +
+                `</mark>` +
+                esc(text.slice(localEnd));
+            }
+          }
+
+          return `
+            <p
+              data-paragraph-index="${fragment.paragraphIndex}"
+              data-start-offset="${fragment.startOffset}"
+              data-end-offset="${fragment.endOffset}"
+            >${renderedText}</p>
+          `;
+        }).join("")
       : html;
 
     return `
@@ -1049,7 +1143,6 @@ function displayReaderSpread(direction = 0) {
       </article>
     `;
   }).join("");
-
 
   updateReaderPageControls();
 
