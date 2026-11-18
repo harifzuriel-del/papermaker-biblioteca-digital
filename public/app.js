@@ -2629,9 +2629,23 @@ function updateStudySelection() {
 }
 
 /* Detectar selección con ratón y teclado. */
-
 bindEvent("#readerText", "mouseup", updateStudySelection);
 bindEvent("#readerText", "keyup", updateStudySelection);
+bindEvent("#readerText", "touchend", () => {
+  setTimeout(updateStudySelection, 100);
+});
+
+document.addEventListener("selectionchange", () => {
+  const selection = window.getSelection();
+
+  if (
+    selection &&
+    !selection.isCollapsed &&
+    $("#readerText")?.contains(selection.anchorNode)
+  ) {
+    updateStudySelection();
+  }
+});
 
 /* Seleccionar color de resaltado. */
 
