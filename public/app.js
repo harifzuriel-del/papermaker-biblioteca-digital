@@ -2695,25 +2695,84 @@ document.addEventListener("selectionchange", () => {
 });
 /* Seleccionar color de resaltado. */
 
+/* ========================================
+   GUARDAR RESALTADOS
+======================================== */
+
+async function saveStudyHighlight() {
+  const selection = state.studySelection;
+  const status = $("#studySelectionStatus");
+
+  if (!selection || !state.currentBook) return;
+
+  if (!state.user) {
+    if (status) {
+      status.textContent =
+        "Inicia sesión para guardar tus resaltados.";
+    }
+    return;
+  }
+
+  const isPrivate = state.currentBook.isPrivate === true;
+
+  const endpoint = isPrivate
+    ? "/api/annotations?private=1"
+    : "/api/annotations";
+
+  const payload = {
+    bookId: selection.bookId,
+    type: "highlight",
+    chapter: selection.chapter,
+    paragraphIndex: selection.paragraphIndex,
+    startOffset: selection.startOffset,
+    endOffset: selection.endOffset,
+    selectedText: selection.selectedText,
+    color: state.studySelectionColor
+  };
+
+  try {
+    await api(endpoint, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+
+    if (status) {
+      status.textContent =
+        "¡Resaltado guardado en tu cuenta!";
+    }
+
+  } catch (error) {
+    console.error("Error al guardar el resaltado:", error);
+
+    if (status) {
+      status.textContent =
+        "No se pudo guardar el resaltado. Inténtalo nuevamente.";
+    }
+  }
+}
+
+/* ========================================
+   SELECCIONAR COLOR DE RESALTADO
+======================================== */
+
 document.querySelectorAll(".highlight-color").forEach(button => {
-  button.addEventListener("click", () => {
+  button.addEventListener("click", async () => {
     state.studySelectionColor =
       button.dataset.highlightColor;
 
     const status = $("#studySelectionStatus");
 
-    if (status && state.studySelection) {
-      status.textContent =
-        `Color seleccionado. Texto: "${state.studySelection.selectedText}"`;
-
+    if (state.studySelection) {
       displayReaderSpread();
+      await saveStudyHighlight();
 
     } else if (status) {
       status.textContent =
-        "Color seleccionado. Ahora selecciona un fragmento del libro.";
+        "Color seleccionado. Primero selecciona un fragmento del libro.";
     }
   });
 });
+
 
 /* TRADUCCIÓN */
 
