@@ -1024,53 +1024,6 @@ function displayReaderSpread(direction = 0) {
     start + perSpread
   );
 
-  
-  // Mostrar la nueva doble página.
-  container.innerHTML = visiblePages.map((html, index) => {
-    const pageIndex = start + index;
-    const fragments = state.readerPageFragments?.[pageIndex] || [];
-
-    const pageContent = fragments.length
-      ? fragments.map(fragment => `
-          <p
-            data-paragraph-index="${fragment.paragraphIndex}"
-            data-start-offset="${fragment.startOffset}"
-            data-end-offset="${fragment.endOffset}"
-          >${esc(fragment.text)}</p>
-        `).join("")
-
-function displayReaderSpread(direction = 0) {
-  const container = $("#readerText");
-  if (!container) return;
-
-  let turnData = null;
-
-  // Guardar visualmente la hoja anterior antes de cambiar el contenido.
-  if (direction !== 0) {
-    const oldPages = Array.from(
-      container.querySelectorAll(".reader-paper-page:not(.reader-page-turn-sheet)")
-    );
-
-    const pageToTurn = direction > 0
-      ? oldPages[oldPages.length - 1]
-      : oldPages[0];
-
-    if (pageToTurn) {
-      turnData = {
-        page: pageToTurn.cloneNode(true),
-        rect: pageToTurn.getBoundingClientRect()
-      };
-    }
-  }
-
-  const perSpread = getPagesPerSpread();
-  const start = Math.floor(state.readerPage / perSpread) * perSpread;
-
-  const visiblePages = state.readerPages.slice(
-    start,
-    start + perSpread
-  );
-
   // Selección que se debe mostrar resaltada.
   const selection = state.studySelection;
 
