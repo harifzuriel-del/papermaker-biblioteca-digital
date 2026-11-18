@@ -2672,8 +2672,7 @@ function updateStudySelection() {
 
   status.textContent =
     `Texto seleccionado: "${selectedText}"`;
-  // Actualizar visualmente el resaltado en el libro.
-displayReaderSpread();
+  
 }
 
 /* Detectar selección con ratón y teclado. */
