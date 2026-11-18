@@ -2520,6 +2520,138 @@ bindEvent("#themeToggle", "click", () => {
 
 bindEvent("#listenButton", "click", toggleSpeech);
 
+/* ========================================
+   HERRAMIENTAS DE LECTURA: SELECCIÓN
+======================================== */
+
+state.studySelection = null;
+state.studySelectionColor = "#ffe66d";
+
+function getStudyParagraph(element) {
+  if (!element) return null;
+
+  if (element.nodeType === Node.TEXT_NODE) {
+    element = element.parentElement;
+  }
+
+  return element?.closest("p[data-paragraph-index]") || null;
+}
+
+function getStudyTextOffset(paragraph, node, offset) {
+  const range = document.createRange();
+
+  range.selectNodeContents(paragraph);
+  range.setEnd(node, offset);
+
+  return range.toString().length;
+}
+
+function updateStudySelection() {
+  const status = $("#studySelectionStatus");
+
+  if (!status) return;
+
+  if (state.showingTranslation) {
+    state.studySelection = null;
+
+    status.textContent =
+      "Las anotaciones están disponibles únicamente sobre el texto original.";
+
+    return;
+  }
+
+  const selection = window.getSelection();
+
+  if (!selection || selection.isCollapsed || !selection.rangeCount) {
+    return;
+  }
+
+  const range = selection.getRangeAt(0);
+
+  const startParagraph = getStudyParagraph(range.startContainer);
+  const endParagraph = getStudyParagraph(range.endContainer);
+
+  if (!startParagraph || startParagraph !== endParagraph) {
+    state.studySelection = null;
+
+    status.textContent =
+      "Selecciona un fragmento dentro de un solo párrafo.";
+
+    return;
+  }
+
+  const paragraphIndex = Number(
+    startParagraph.dataset.paragraphIndex
+  );
+
+  const baseOffset = Number(
+    startParagraph.dataset.startOffset
+  );
+
+  const startOffset =
+    baseOffset +
+    getStudyTextOffset(
+      startParagraph,
+      range.startContainer,
+      range.startOffset
+    );
+
+  const endOffset =
+    baseOffset +
+    getStudyTextOffset(
+      startParagraph,
+      range.endContainer,
+      range.endOffset
+    );
+
+  const selectedText = range.toString();
+
+  if (
+    !Number.isInteger(paragraphIndex) ||
+    !selectedText.trim() ||
+    endOffset <= startOffset
+  ) {
+    state.studySelection = null;
+    return;
+  }
+
+  state.studySelection = {
+    bookId: String(state.currentBook?.id || ""),
+    chapter: state.chapter,
+    paragraphIndex,
+    startOffset,
+    endOffset,
+    selectedText
+  };
+
+  status.textContent =
+    `Texto seleccionado: "${selectedText}"`;
+}
+
+/* Detectar selección con ratón y teclado. */
+
+bindEvent("#readerText", "mouseup", updateStudySelection);
+bindEvent("#readerText", "keyup", updateStudySelection);
+
+/* Seleccionar color de resaltado. */
+
+document.querySelectorAll(".highlight-color").forEach(button => {
+  button.addEventListener("click", () => {
+    state.studySelectionColor =
+      button.dataset.highlightColor;
+
+    const status = $("#studySelectionStatus");
+
+    if (status && state.studySelection) {
+      status.textContent =
+        `Color seleccionado. Texto: "${state.studySelection.selectedText}"`;
+    } else if (status) {
+      status.textContent =
+        "Color seleccionado. Ahora selecciona un fragmento del libro.";
+    }
+  });
+});
+
 /* TRADUCCIÓN */
 
 bindEvent("#translateButton", "click", () => {
