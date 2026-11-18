@@ -2741,7 +2741,6 @@ document.addEventListener("selectionchange", () => {
     updateStudySelection();
   }
 });
-
 /* Seleccionar color de resaltado. */
 
 document.querySelectorAll(".highlight-color").forEach(button => {
@@ -2754,6 +2753,9 @@ document.querySelectorAll(".highlight-color").forEach(button => {
     if (status && state.studySelection) {
       status.textContent =
         `Color seleccionado. Texto: "${state.studySelection.selectedText}"`;
+
+      displayReaderSpread();
+
     } else if (status) {
       status.textContent =
         "Color seleccionado. Ahora selecciona un fragmento del libro.";
