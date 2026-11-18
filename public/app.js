@@ -2721,6 +2721,7 @@ async function saveStudyHighlight() {
 
   const payload = {
     bookId: selection.bookId,
+    isPrivate: isPrivate,
     type: "highlight",
     chapter: selection.chapter,
     paragraphIndex: selection.paragraphIndex,
