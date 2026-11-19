@@ -1783,8 +1783,11 @@ async function loadStudyAnnotations(bookId, isPrivate = false) {
       ? data.annotations
       : [];
 
-    console.log("Anotaciones recuperadas:", data);
-
+   console.log(
+  "DETALLE DE ANOTACIONES:",
+  JSON.stringify(data.annotations, null, 2)
+);
+    
     if (status) {
       status.textContent =
         `Consulta completada. Anotaciones recuperadas: ${state.studyAnnotations.length}`;
