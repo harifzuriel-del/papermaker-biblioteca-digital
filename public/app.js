@@ -1680,9 +1680,28 @@ async function openBook(id) {
    RECUPERAR ANOTACIONES DEL LIBRO
 ======================================== */
 
+
 async function loadStudyAnnotations(bookId, isPrivate = false) {
+  const status = $("#studySelectionStatus");
+
+  if (status) {
+    status.textContent = "Comprobando sesión para recuperar anotaciones...";
+  }
+
+  console.log("Iniciando recuperación de anotaciones:", {
+    bookId,
+    isPrivate,
+    user: !!state.user
+  });
+
   if (!state.user) {
     state.studyAnnotations = [];
+
+    if (status) {
+      status.textContent =
+        "No se detectó una sesión activa para recuperar las anotaciones.";
+    }
+
     return;
   }
 
@@ -1697,16 +1716,25 @@ async function loadStudyAnnotations(bookId, isPrivate = false) {
       ? data.annotations
       : [];
 
-    console.log(
-      "Anotaciones recuperadas:",
-      state.studyAnnotations
-    );
+    console.log("Anotaciones recuperadas:", data);
+
+    if (status) {
+      status.textContent =
+        `Consulta completada. Anotaciones recuperadas: ${state.studyAnnotations.length}`;
+    }
 
   } catch (error) {
     console.error("Error al recuperar anotaciones:", error);
+
+    if (status) {
+      status.textContent =
+        `Error al recuperar anotaciones: ${error.message}`;
+    }
+
     state.studyAnnotations = [];
   }
 }
+
 
 async function openPrivateBook(id) {
     try {
