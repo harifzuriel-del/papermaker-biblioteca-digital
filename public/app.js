@@ -992,6 +992,7 @@ function animateReaderPageTurn(container, pageClone, pageRect, direction) {
 }
 
 
+
 function displayReaderSpread(direction = 0) {
   const container = $("#readerText");
   if (!container) return;
@@ -1024,10 +1025,18 @@ function displayReaderSpread(direction = 0) {
     start + perSpread
   );
 
-  // Selección que se debe mostrar resaltada.
+  // Selección temporal del usuario.
   const selection = state.studySelection;
 
-  // Mostrar las páginas y sus posibles resaltados.
+  // Resaltados guardados en la cuenta.
+  const savedHighlights = !state.showingTranslation
+    ? (state.studyAnnotations || []).filter(annotation =>
+        annotation.type === "highlight" &&
+        Number(annotation.chapter) === Number(state.chapter)
+      )
+    : [];
+
+  // Mostrar las páginas y sus resaltados.
   container.innerHTML = visiblePages.map((html, index) => {
     const pageIndex = start + index;
     const fragments = state.readerPageFragments?.[pageIndex] || [];
@@ -1036,44 +1045,101 @@ function displayReaderSpread(direction = 0) {
       ? fragments.map(fragment => {
           const text = String(fragment.text || "");
           const fragmentStart = Number(fragment.startOffset) || 0;
-          const fragmentEnd = Number(fragment.endOffset);
+          const fragmentEnd = Number.isFinite(Number(fragment.endOffset))
+            ? Number(fragment.endOffset)
+            : fragmentStart + text.length;
+
+          const paragraphIndex = Number(fragment.paragraphIndex);
+
+          const fragmentHighlights = savedHighlights.filter(annotation =>
+            Number(annotation.paragraphIndex) === paragraphIndex &&
+            Number(annotation.endOffset) > fragmentStart &&
+            Number(annotation.startOffset) < fragmentEnd
+          );
 
           const sameSelection =
             selection &&
             !state.showingTranslation &&
             String(selection.bookId) === String(state.currentBook?.id || "") &&
             Number(selection.chapter) === Number(state.chapter) &&
-            Number(selection.paragraphIndex) === Number(fragment.paragraphIndex);
+            Number(selection.paragraphIndex) === paragraphIndex &&
+            Number(selection.endOffset) > fragmentStart &&
+            Number(selection.startOffset) < fragmentEnd;
 
-          let renderedText = esc(text);
+          // Crear divisiones según los límites de cada resaltado.
+          const boundaries = new Set([fragmentStart, fragmentEnd]);
+
+          fragmentHighlights.forEach(annotation => {
+            boundaries.add(
+              Math.max(fragmentStart, Number(annotation.startOffset))
+            );
+
+            boundaries.add(
+              Math.min(fragmentEnd, Number(annotation.endOffset))
+            );
+          });
 
           if (sameSelection) {
-            const overlapStart = Math.max(
-              Number(selection.startOffset),
-              fragmentStart
+            boundaries.add(
+              Math.max(fragmentStart, Number(selection.startOffset))
             );
 
-            const overlapEnd = Math.min(
-              Number(selection.endOffset),
-              Number.isFinite(fragmentEnd)
-                ? fragmentEnd
-                : fragmentStart + text.length
+            boundaries.add(
+              Math.min(fragmentEnd, Number(selection.endOffset))
+            );
+          }
+
+          const sortedBoundaries = [...boundaries]
+            .filter(value =>
+              Number.isFinite(value) &&
+              value >= fragmentStart &&
+              value <= fragmentEnd
+            )
+            .sort((a, b) => a - b);
+
+          let renderedText = "";
+
+          for (let i = 0; i < sortedBoundaries.length - 1; i++) {
+            const segmentStart = sortedBoundaries[i];
+            const segmentEnd = sortedBoundaries[i + 1];
+
+            if (segmentEnd <= segmentStart) continue;
+
+            const localStart = segmentStart - fragmentStart;
+            const localEnd = segmentEnd - fragmentStart;
+
+            const segmentText = text.slice(localStart, localEnd);
+
+            // La selección temporal tiene prioridad visual.
+            const isSelected =
+              sameSelection &&
+              segmentStart < Number(selection.endOffset) &&
+              segmentEnd > Number(selection.startOffset);
+
+            const savedHighlight = fragmentHighlights.find(annotation =>
+              segmentStart >= Number(annotation.startOffset) &&
+              segmentEnd <= Number(annotation.endOffset)
             );
 
-            if (overlapEnd > overlapStart) {
-              const localStart = overlapStart - fragmentStart;
-              const localEnd = overlapEnd - fragmentStart;
+            let color = null;
 
-              const color = /^#[0-9a-f]{6}$/i.test(state.studySelectionColor)
+            if (isSelected) {
+              color = /^#[0-9a-f]{6}$/i.test(state.studySelectionColor)
                 ? state.studySelectionColor
                 : "#ffe66d";
+            } else if (savedHighlight) {
+              color = /^#[0-9a-f]{6}$/i.test(savedHighlight.color)
+                ? savedHighlight.color
+                : "#ffe66d";
+            }
 
-              renderedText =
-                esc(text.slice(0, localStart)) +
+            if (color) {
+              renderedText +=
                 `<mark style="background-color:${color}; text-decoration:underline 2px ${color}; text-underline-offset:2px; border-radius:2px;">` +
-                esc(text.slice(localStart, localEnd)) +
-                `</mark>` +
-                esc(text.slice(localEnd));
+                esc(segmentText) +
+                `</mark>`;
+            } else {
+              renderedText += esc(segmentText);
             }
           }
 
@@ -1109,6 +1175,7 @@ function displayReaderSpread(direction = 0) {
     );
   }
 }
+
 
 
 
