@@ -1676,6 +1676,38 @@ async function openBook(id) {
   }
 }
 
+/* ========================================
+   RECUPERAR ANOTACIONES DEL LIBRO
+======================================== */
+
+async function loadStudyAnnotations(bookId, isPrivate = false) {
+  if (!state.user) {
+    state.studyAnnotations = [];
+    return;
+  }
+
+  const endpoint = isPrivate
+    ? `/api/annotations?private=1&bookId=${encodeURIComponent(bookId)}`
+    : `/api/annotations?bookId=${encodeURIComponent(bookId)}`;
+
+  try {
+    const data = await api(endpoint);
+
+    state.studyAnnotations = Array.isArray(data.annotations)
+      ? data.annotations
+      : [];
+
+    console.log(
+      "Anotaciones recuperadas:",
+      state.studyAnnotations
+    );
+
+  } catch (error) {
+    console.error("Error al recuperar anotaciones:", error);
+    state.studyAnnotations = [];
+  }
+}
+
 async function openPrivateBook(id) {
     try {
     state.translationRequestId++;
@@ -1710,15 +1742,21 @@ async function openPrivateBook(id) {
 
     renderChapter();
 
-    if (state.user) {
+       if (state.user) {
       await syncPrivateProgressFromServer(id);
+
+      // Recuperar anotaciones guardadas del libro.
+      await loadStudyAnnotations(id, true);
+
     } else {
+      state.studyAnnotations = [];
+
       $("#syncStatus").textContent =
         "Inicia sesión para guardar tu progreso.";
     }
 
-  // Recuperar traducción del capítulo restaurado.
-await loadSavedTranslationForCurrentChapter();
+    // Recuperar traducción del capítulo restaurado.
+    await loadSavedTranslationForCurrentChapter();
     
  } catch (error) {
     console.error("Error al abrir el libro privado:", error);
